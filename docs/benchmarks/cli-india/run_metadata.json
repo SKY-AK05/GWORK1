@@ -1,0 +1,80 @@
+{
+  "schema_version": "1.0",
+  "run_id": "45022c64fa8ec442",
+  "status": "completed",
+  "task": "Investigate ORCHVATE as a company in India. Input company: ORCHVATE. Target country: India. Resolve the brand versus legal entity, distinguish similarly named companies, and use public or explicitly authorized information only. Cover identity, country of origin/incorporation/headquarters, operations, products/services, customers/partnerships, leadership, workforce and hiring signals, public social presence, recent developments, market context, risks, and unresolved questions. Known website/domain: https://orchvate.com. Recent-development period: last 12 months.",
+  "depth": "brief",
+  "model": "openai/gpt-5-mini",
+  "writer_model": "openai/gpt-5-mini",
+  "search_plan": [
+    "ORCHVATE site:orchvate.com LinkedIn \"ORCHVATE\" \"incorporated\" \"Ministry of Corporate Affairs\" India",
+    "ORCHVATE news 2024..2025 partnership funding hiring product observability APM Kubernetes \"press release\"",
+    "site:linkedin.com/company ORCHVATE",
+    "site:instagram.com ORCHVATE",
+    "site:facebook.com ORCHVATE",
+    "site:x.com ORCHVATE OR site:twitter.com ORCHVATE"
+  ],
+  "source_count": 0,
+  "coverage_summary": {
+    "search_queries": 6,
+    "search_results": 10,
+    "search_failures": 5,
+    "fetched_pages": 5,
+    "fetch_failures": 0
+  },
+  "tool_errors": [
+    {
+      "query": "ORCHVATE site:orchvate.com LinkedIn \"ORCHVATE\" \"incorporated\" \"Ministry of Corporate Affairs\" India",
+      "provider": "ddgs_search",
+      "attempt": 1,
+      "status": "failed",
+      "reason": "timeout",
+      "retryable": true
+    },
+    {
+      "query": "ORCHVATE site:orchvate.com LinkedIn \"ORCHVATE\" \"incorporated\" \"Ministry of Corporate Affairs\" India",
+      "provider": "ddgs_search",
+      "attempt": 2,
+      "status": "failed",
+      "reason": "timeout",
+      "retryable": false
+    },
+    {
+      "query": "ORCHVATE news 2024..2025 partnership funding hiring product observability APM Kubernetes \"press release\"",
+      "provider": "ddgs_search",
+      "attempt": 1,
+      "status": "failed",
+      "reason": "timeout",
+      "retryable": true
+    },
+    {
+      "query": "ORCHVATE news 2024..2025 partnership funding hiring product observability APM Kubernetes \"press release\"",
+      "provider": "ddgs_search",
+      "attempt": 2,
+      "status": "success",
+      "result_count": 5,
+      "retryable": false
+    },
+    {
+      "query": "site:linkedin.com/company ORCHVATE",
+      "provider": "ddgs_search",
+      "attempt": 1,
+      "status": "success",
+      "result_count": 5,
+      "retryable": false
+    }
+  ],
+  "registry_verification": {
+    "registry": "Companies House",
+    "outcome": "inconclusive_verification",
+    "records": [],
+    "error": "COMPANIES_HOUSE_API_KEY is not configured",
+    "retrieved_at": "2026-10-09T21:04:51.059435+00:00",
+    "verification_status": "unverified"
+  },
+  "report_paths": {
+    "markdown": "/home/ubuntu/zerone-work/cli-smoke-reports/orchvate/20261009T210254Z/company_research_report.md",
+    "json": "/home/ubuntu/zerone-work/cli-smoke-reports/orchvate/20261009T210254Z/company_research.json",
+    "sources": "/home/ubuntu/zerone-work/cli-smoke-reports/orchvate/20261009T210254Z/sources.json"
+  }
+}

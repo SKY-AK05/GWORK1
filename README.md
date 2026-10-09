@@ -461,3 +461,22 @@ PYTHONPATH=. python scripts/run_mvp_research_system.py \
 The output directory contains `researcher_memo.md`, `final_report.md`, and the validated `prospect.json`. A missing Companies House key yields `inconclusive_verification`; it must not be interpreted as proof that the company is absent.
 
 The original one-line GWORK1 README is preserved at [`docs/gwork1-original-readme.md`](docs/gwork1-original-readme.md).
+
+### Product CLI
+
+The supported product-facing command accepts the required company and country and writes a timestamped run directory:
+
+```bash
+python -m app research \
+  --company "ORCHVATE" \
+  --country "India" \
+  --website "https://orchvate.com" \
+  --depth comprehensive \
+  --recent "last 12 months"
+```
+
+Outputs are written below `reports/<company-slug>/<UTC-timestamp>/` as `company_research_report.md`, `company_research.json`, `sources.json`, `run_metadata.json`, `prospect.json`, and `changes.json`. A latest snapshot is maintained under the company directory in `snapshots/latest.json`; change summaries distinguish newly observed fields from changed fields without treating observation time as event time. The CLI validates the four core product artifacts before reporting completion.
+
+### Implementation status
+
+The three delivery phases are pushed separately on `zerone-prospect-intelligence`: Phase 1 hardens public URL boundaries and adds SSRF/prompt-injection boundary tests; Phase 2 adds the product CLI and stable manifests; Phase 3 adds artifact validation, snapshots, change detection, and release documentation. Authenticated browser research is not enabled by the product CLI; the current core path uses public sources and reports login/access limitations rather than collecting passwords or cookies.

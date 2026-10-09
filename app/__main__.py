@@ -81,6 +81,11 @@ async def _run(args: argparse.Namespace) -> int:
         sys.argv = old_argv
     print(f"Run status       : {'completed' if status == 0 else 'failed'}")
     print(f"Report directory : {workdir}")
+    from src.validation import validate_product_artifacts
+    validation = validate_product_artifacts(workdir)
+    print(f"Artifact validation: {'passed' if validation['valid'] else 'failed'}")
+    for error in validation["errors"]:
+        print(f"Validation error : {error}", file=sys.stderr)
     for name in ("company_research_report.md", "company_research.json", "sources.json", "run_metadata.json", "prospect.json"):
         path = workdir / name
         if path.exists():

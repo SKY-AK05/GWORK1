@@ -1,0 +1,26 @@
+{
+  "brand_name": "ORCHVATE",
+  "official_domain": null,
+  "legal_entity_name": null,
+  "jurisdiction": null,
+  "registration_number": null,
+  "company_description": "The single most important finding is that, based on the researcher-supplied materials, there is no public, evidence-bearing documentation within the provided fetches that verifies ORCHVATE as a legal entity or brand operating in India. Overall confidence in this finding is High for the narrow claim that the supplied materials do not corroborate ORCHVATE's identity or India incorporation; confidence that ORCHVATE does not exist at all is Low because absence of evidence in the provided inputs is not proof of absence. The key open uncertainty is whether authoritative public records (MCA, GST, trademark registries), the company's own website content at orchvate.com, domain WHOIS/SSL metadata, or LinkedIn/company filings would produce resolving evidence if queried directly.",
+  "sources": [],
+  "evidence": [],
+  "identity_match_status": "inconclusive_verification",
+  "registration_verification_status": "inconclusive_verification",
+  "confidence": "low",
+  "unresolved_questions": [
+    "Is ORCHVATE (the brand) registered as a legal entity in India (exact legal name and CIN)?",
+    "If registered in India, what is the registered office address, incorporation date, and list of directors/officers per MCA records?",
+    "If not incorporated in India, where is the legal entity incorporated (country and jurisdiction)?",
+    "Does the domain orchvate.com explicitly identify a legal entity (company name) and corporate contact details on the site (privacy/legal/terms/contacts pages)?",
+    "Are there any trademarks or registered brand filings for ORCHVATE in India or internationally?",
+    "Are there verifiable customer or partner announcements that name ORCHVATE and its legal entity (press releases, partner portals, case studies)?",
+    "Who are the named founders and executives (if any) and can their identities be corroborated via LinkedIn or corporate filings?",
+    "Are there active job postings (India-based) that identify hiring locations, headcount signals, or recruiting emails/domain?",
+    "Have there been any authorized press releases, funding events, acquisitions, or other notable developments in the last 12 months that explicitly name ORCHVATE and the legal entity?",
+    "Are there similarly named companies in India or internationally that could be conflated with the brand?",
+    "Is the orchvate.com domain owned/operated by the same legal entity claimed in any public record, WHOIS, or SSL cert metadata?"
+  ]
+}

@@ -33,7 +33,10 @@ def test_manifest_exports_are_schema_versioned(tmp_path: Path):
         memo,
         str(tmp_path),
     )
-    assert set(paths) == {"company_report_path", "company_json_path", "sources_json_path", "run_metadata_path"}
+    assert set(paths) == {
+        "company_report_path", "company_json_path", "sources_json_path", "run_metadata_path",
+        "snapshot_path", "changes_path",
+    }
     assert json.loads(Path(paths["company_json_path"]).read_text())["schema_version"] == "1.0"
     assert json.loads(Path(paths["sources_json_path"]).read_text())["sources"][0]["url"] == "https://example.com"
     assert json.loads(Path(paths["run_metadata_path"]).read_text())["run_id"] == "run-1"
