@@ -1807,7 +1807,7 @@ def _build_prospect_record(
 
 
 async def save_artifacts_node(state: ResearchState) -> dict:
-    """Write Markdown/PDF artifacts plus a validated prospect JSON record."""
+    """Write Markdown, JSON, PDF, and machine-readable run manifest artifacts."""
     from src.exporters import mermaid_to_png, report_to_pdf
 
     workdir = state["workdir"]
@@ -1843,6 +1843,7 @@ async def save_artifacts_node(state: ResearchState) -> dict:
         with open(prospect_path, "w", encoding="utf-8") as handle:
             handle.write(prospect.model_dump_json(indent=2))
         result["prospect_json_path"] = prospect_path
+        result.update(_save_product_manifests(state, report, memo_for_record, workdir))
 
         # Diagram PNG export first (PDF may embed it)
         diagram_path: Optional[str] = None
@@ -1870,6 +1871,65 @@ async def save_artifacts_node(state: ResearchState) -> dict:
             print(f"[exporters] PDF generation failed (non-fatal): {exc}", flush=True)
 
     return result
+
+
+def _save_product_manifests(
+    state: ResearchState,
+    report: WriterReport,
+    memo: Optional[ResearchMemo],
+    workdir: str,
+) -> dict:
+    """Save stable product-facing names without changing the legacy artifacts."""
+    report_payload = report.model_dump()
+    report_payload["schema_version"] = "1.0"
+    report_payload["run_id"] = state.get("session_id")
+    report_payload["input"] = {"task": state.get("task"), "depth": state.get("depth")}
+    report_json = os.path.join(workdir, "company_research.json")
+    with open(report_json, "w", encoding="utf-8") as handle:
+        json.dump(report_payload, handle, ensure_ascii=False, indent=2)
+
+    sources = [source.model_dump() for source in (memo.sources if memo else [])]
+    sources_json = os.path.join(workdir, "sources.json")
+    with open(sources_json, "w", encoding="utf-8") as handle:
+        json.dump({"schema_version": "1.0", "sources": sources}, handle, ensure_ascii=False, indent=2)
+
+    metadata = {
+        "schema_version": "1.0",
+        "run_id": state.get("session_id"),
+        "status": report.run_status,
+        "task": state.get("task"),
+        "depth": state.get("depth"),
+        "model": state.get("model_name"),
+        "writer_model": state.get("writer_model_name") or state.get("model_name"),
+        "search_plan": state.get("search_plan", []),
+        "source_count": len(sources),
+        "coverage_summary": state.get("coverage_summary", {}),
+        "tool_errors": state.get("search_failures", []) + state.get("fetch_failures", []),
+        "registry_verification": state.get("registry_verification", {}),
+        "report_paths": {
+            "markdown": os.path.join(workdir, "company_research_report.md"),
+            "json": report_json,
+            "sources": sources_json,
+        },
+    }
+    metadata_json = os.path.join(workdir, "run_metadata.json")
+    with open(metadata_json, "w", encoding="utf-8") as handle:
+        json.dump(metadata, handle, ensure_ascii=False, indent=2)
+
+    report_md_path = os.path.join(workdir, "final_report.md")
+    if not os.path.exists(report_md_path):
+        _save_report(report, workdir)
+    report_markdown = os.path.join(workdir, "company_research_report.md")
+    with open(report_md_path, "r", encoding="utf-8") as source:
+        markdown = source.read()
+    with open(report_markdown, "w", encoding="utf-8") as target:
+        target.write(markdown)
+    return {
+        "company_report_path": report_markdown,
+        "company_json_path": report_json,
+        "sources_json_path": sources_json,
+        "run_metadata_path": metadata_json,
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════════ #
