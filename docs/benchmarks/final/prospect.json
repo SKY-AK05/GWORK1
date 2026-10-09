@@ -1,0 +1,170 @@
+{
+  "brand_name": "ORCHVATE",
+  "official_domain": "orchvate.com",
+  "legal_entity_name": null,
+  "jurisdiction": "United Kingdom",
+  "registration_number": null,
+  "company_description": "The single most important finding is that ORCHVATE clearly operates as an active commercial brand with an official website (orchvate.com) describing neurodiversity-focused hiring programs and data-annotation services, but the fetched evidence contains no authoritative record tying that brand to a UK-incorporated legal entity. Overall confidence in the brand-level observations is High (direct website and social evidence); confidence that a UK legal entity exists is Low-to-Medium because Companies House or other UK registry records were not found in the fetched material. The key open uncertainty is the legal-entity mapping: whether a UK-registered company, branch, or subsidiary exists under a different name and is simply not disclosed on the brand's public pages.",
+  "sources": [
+    {
+      "title": "Fetched content from https://www.orchvate.com/OurInsights.html",
+      "url": "https://www.orchvate.com/OurInsights.html",
+      "evidence": [
+        "There has been learning at every step on our journey over the past 6 months.",
+        "To cater to the first group we offer our “Orchvate Solution” – the Corporate ND Hiring and Integration Program to our corporate partners.",
+        "To cater to the second group, we offer to set up “remote-first data annotation units” that will manage and deliver data annotation projects outsourced by corporates.",
+        "ORCHVATE PROTECTS AND MANAGES ALL PERSONAL INFORMATION SHARED ON THIS SITE. THE DATA WILL BE USED EXCLUSIVELY BY ORCHVATE TO PROVIDE YOU SERVICES THAT BEST MATCH YOUR REQUIREMENTS AND WILL NOT BE SHARED WITH ANYONE WITHOUT YOUR CONSENT.",
+        "Contact Us Phone: +91-8105397506  +91-9176043250  Email: info@orchvate.com",
+        "Links to social: https://www.facebook.com/orchvate/ https://instagram.com/orchvate https://www.linkedin.com/company/orchvate"
+      ],
+      "platform": "website",
+      "source_category": "official",
+      "discovery_method": "search_result",
+      "access_status": "fetched",
+      "identity_status": "candidate",
+      "publication_date": null,
+      "retrieved_at": null
+    },
+    {
+      "title": "Fetched content from https://www.orchvate.com/Our-Journey.html",
+      "url": "https://www.orchvate.com/Our-Journey.html",
+      "evidence": [
+        "When we started placing NDs in corporates, we were flooded with applications and enquiries ...",
+        "we discovered Dataloop ... they let us use it for free for a whole quarter. If billed, this would have been in the 1000s of dollars.",
+        "Taskmonk, an Indian data annotation platform, stepped up.",
+        "Microsoft soon accepted us into their Startups program and gave us free Azure credits.",
+        "we connected to iMerit ... our group was on the iMerit L &D platform being tested for their annotation skills. All did well scoring over 90% in record time",
+        "We featured at the NASSCOM AI Summit"
+      ],
+      "platform": "website",
+      "source_category": "official",
+      "discovery_method": "search_result",
+      "access_status": "fetched",
+      "identity_status": "candidate",
+      "publication_date": null,
+      "retrieved_at": "2026-10-09T20:35:31.223483+00:00"
+    },
+    {
+      "title": "Fetched content from https://www.facebook.com/orchvate/",
+      "url": "https://www.facebook.com/orchvate/",
+      "evidence": [
+        "Orchvate 365 followers • 17 following",
+        "Profile page titled 'Orchvate' with posts/photos and About tab (login required for full view)."
+      ],
+      "platform": "facebook",
+      "source_category": "social",
+      "discovery_method": "official_site_link",
+      "access_status": "partial_public",
+      "identity_status": "candidate",
+      "publication_date": null,
+      "retrieved_at": "2026-10-09T20:31:19.679762+00:00"
+    },
+    {
+      "title": "Fetched content from https://instagram.com/orchvate",
+      "url": "https://instagram.com/orchvate",
+      "evidence": [
+        "Instagram handle exists at https://instagram.com/orchvate (login required for full content).",
+        "Instagram landing page requires login to view posts publicly."
+      ],
+      "platform": "instagram",
+      "source_category": "social",
+      "discovery_method": "official_site_link",
+      "access_status": "partial_public",
+      "identity_status": "candidate",
+      "publication_date": null,
+      "retrieved_at": "2026-10-09T20:35:33.579651+00:00"
+    }
+  ],
+  "evidence": [
+    {
+      "claim": null,
+      "source_url": "https://www.orchvate.com/OurInsights.html",
+      "excerpt": "There has been learning at every step on our journey over the past 6 months."
+    },
+    {
+      "claim": null,
+      "source_url": "https://www.orchvate.com/OurInsights.html",
+      "excerpt": "To cater to the first group we offer our “Orchvate Solution” – the Corporate ND Hiring and Integration Program to our corporate partners."
+    },
+    {
+      "claim": null,
+      "source_url": "https://www.orchvate.com/OurInsights.html",
+      "excerpt": "To cater to the second group, we offer to set up “remote-first data annotation units” that will manage and deliver data annotation projects outsourced by corporates."
+    },
+    {
+      "claim": null,
+      "source_url": "https://www.orchvate.com/OurInsights.html",
+      "excerpt": "ORCHVATE PROTECTS AND MANAGES ALL PERSONAL INFORMATION SHARED ON THIS SITE. THE DATA WILL BE USED EXCLUSIVELY BY ORCHVATE TO PROVIDE YOU SERVICES THAT BEST MATCH YOUR REQUIREMENTS AND WILL NOT BE SHARED WITH ANYONE WITHOUT YOUR CONSENT."
+    },
+    {
+      "claim": null,
+      "source_url": "https://www.orchvate.com/OurInsights.html",
+      "excerpt": "Contact Us Phone: +91-8105397506  +91-9176043250  Email: info@orchvate.com"
+    },
+    {
+      "claim": null,
+      "source_url": "https://www.orchvate.com/OurInsights.html",
+      "excerpt": "Links to social: https://www.facebook.com/orchvate/ https://instagram.com/orchvate https://www.linkedin.com/company/orchvate"
+    },
+    {
+      "claim": null,
+      "source_url": "https://www.orchvate.com/Our-Journey.html",
+      "excerpt": "When we started placing NDs in corporates, we were flooded with applications and enquiries ..."
+    },
+    {
+      "claim": null,
+      "source_url": "https://www.orchvate.com/Our-Journey.html",
+      "excerpt": "we discovered Dataloop ... they let us use it for free for a whole quarter. If billed, this would have been in the 1000s of dollars."
+    },
+    {
+      "claim": null,
+      "source_url": "https://www.orchvate.com/Our-Journey.html",
+      "excerpt": "Taskmonk, an Indian data annotation platform, stepped up."
+    },
+    {
+      "claim": null,
+      "source_url": "https://www.orchvate.com/Our-Journey.html",
+      "excerpt": "Microsoft soon accepted us into their Startups program and gave us free Azure credits."
+    },
+    {
+      "claim": null,
+      "source_url": "https://www.orchvate.com/Our-Journey.html",
+      "excerpt": "we connected to iMerit ... our group was on the iMerit L &D platform being tested for their annotation skills. All did well scoring over 90% in record time"
+    },
+    {
+      "claim": null,
+      "source_url": "https://www.orchvate.com/Our-Journey.html",
+      "excerpt": "We featured at the NASSCOM AI Summit"
+    },
+    {
+      "claim": null,
+      "source_url": "https://www.facebook.com/orchvate/",
+      "excerpt": "Orchvate 365 followers • 17 following"
+    },
+    {
+      "claim": null,
+      "source_url": "https://www.facebook.com/orchvate/",
+      "excerpt": "Profile page titled 'Orchvate' with posts/photos and About tab (login required for full view)."
+    },
+    {
+      "claim": null,
+      "source_url": "https://instagram.com/orchvate",
+      "excerpt": "Instagram handle exists at https://instagram.com/orchvate (login required for full content)."
+    },
+    {
+      "claim": null,
+      "source_url": "https://instagram.com/orchvate",
+      "excerpt": "Instagram landing page requires login to view posts publicly."
+    }
+  ],
+  "identity_match_status": "possible_match",
+  "registration_verification_status": "inconclusive_verification",
+  "confidence": "medium",
+  "unresolved_questions": [
+    "Is there a legally-registered ORCHVATE company in the United Kingdom (Companies House entry, registration number, registered office, directors)?",
+    "What is the legal entity name and jurisdiction that operates the orchvate.com website (incorporation country and registration number)?",
+    "Are there any UK-specific trading names, subsidiaries, or branches for ORCHVATE that differ from the brand site (orchvate.com)?",
+    "Are there other similarly named companies in the UK (e.g., Orchvate vs ORCHVATE vs Orchvate Ltd) that could be conflated with this brand?",
+    "Are there more authoritative offline records (invoices, contracts, customer references) tying ORCHVATE brand to a UK legal entity?"
+  ]
+}
