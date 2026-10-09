@@ -1,5 +1,8 @@
 import os
 import asyncio
+import ipaddress
+import socket
+from urllib.parse import urlparse
 from typing import Optional
 import tempfile
 from dotenv import load_dotenv
@@ -27,6 +30,40 @@ from src.logger import logger
 
 # Default timeout for web fetching (in seconds)
 DEFAULT_FETCH_TIMEOUT = 15  # 15 seconds per fetch attempt
+
+
+def is_safe_public_url(url: str, *, resolve_dns: bool = False) -> bool:
+    """Return whether a URL is an allowed public HTTP(S) research target."""
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            return False
+        if parsed.username or parsed.password:
+            return False
+        host = parsed.hostname.rstrip(".").lower()
+        if host in {"localhost", "localhost.localdomain"} or host.endswith(".local"):
+            return False
+        try:
+            addresses = [ipaddress.ip_address(host)]
+        except ValueError:
+            if not resolve_dns:
+                return True
+            try:
+                addresses = [ipaddress.ip_address(item[4][0]) for item in socket.getaddrinfo(host, None)]
+            except (OSError, ValueError):
+                return False
+        return all(
+            not (
+                address.is_private
+                or address.is_loopback
+                or address.is_link_local
+                or address.is_reserved
+                or address.is_multicast
+            )
+            for address in addresses
+        )
+    except (TypeError, ValueError):
+        return False
 
 
 def is_probable_pdf_url(url: str) -> bool:
@@ -125,6 +162,9 @@ async def fetch_url(url: str, timeout: int = DEFAULT_FETCH_TIMEOUT) -> Optional[
         DocumentConverterResult if successful, None otherwise
     """
     failure_reasons = []
+    if not is_safe_public_url(url):
+        logger.warning("| blocked unsafe research URL: %s", url)
+        return None
     try:
         if is_probable_pdf_url(url):
             logger.info(f"| 📄 Detected PDF-like URL, using direct PDF fetch: {url}")
