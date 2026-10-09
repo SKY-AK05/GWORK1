@@ -1887,6 +1887,7 @@ def _save_product_manifests(
     report_json = os.path.join(workdir, "company_research.json")
     with open(report_json, "w", encoding="utf-8") as handle:
         json.dump(report_payload, handle, ensure_ascii=False, indent=2)
+    snapshot_paths = _save_snapshot(report_payload, workdir)
 
     sources = [source.model_dump() for source in (memo.sources if memo else [])]
     sources_json = os.path.join(workdir, "sources.json")
@@ -1929,7 +1930,31 @@ def _save_product_manifests(
         "company_json_path": report_json,
         "sources_json_path": sources_json,
         "run_metadata_path": metadata_json,
+        **snapshot_paths,
     }
+
+
+def _save_snapshot(prospect: dict, workdir: str) -> dict:
+    """Store the latest report payload and a bounded JSON change summary."""
+    from src.validation import compare_snapshot
+
+    snapshot_dir = os.path.join(os.path.dirname(workdir), "snapshots")
+    os.makedirs(snapshot_dir, exist_ok=True)
+    latest_path = os.path.join(snapshot_dir, "latest.json")
+    previous = None
+    if os.path.exists(latest_path):
+        try:
+            with open(latest_path, "r", encoding="utf-8") as handle:
+                previous = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            previous = None
+    changes = compare_snapshot(previous, prospect)
+    with open(latest_path, "w", encoding="utf-8") as handle:
+        json.dump(prospect, handle, ensure_ascii=False, indent=2)
+    changes_path = os.path.join(workdir, "changes.json")
+    with open(changes_path, "w", encoding="utf-8") as handle:
+        json.dump(changes, handle, ensure_ascii=False, indent=2)
+    return {"snapshot_path": latest_path, "changes_path": changes_path}
 
 
 # ═══════════════════════════════════════════════════════════════════════════ #
