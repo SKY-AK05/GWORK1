@@ -31,6 +31,9 @@ class ResearchState(TypedDict):
 
     # ── Research pipeline (set by execute_searches / fetch_pages) ──────
     search_plan: List[str]
+    research_plan: dict
+    decision_trace: List[dict]
+    model_usage: List[dict]
     search_results: List[dict]         # [{url, title, snippet}, ...]
     fetched_pages: List[dict]          # [{url, title, content}, ...]
     source_coverage: List[dict]        # typed retrieval/discovery status per candidate URL

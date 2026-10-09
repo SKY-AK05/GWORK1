@@ -35,6 +35,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import os
 import sys
 from pathlib import Path
 
@@ -61,7 +62,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model",
-        default="openrouter/gemini-3-flash-preview",
+        default=os.getenv("AI_MODEL", "openrouter/gemini-3-flash-preview"),
         help="Research model for query planning and gap analysis ('provider/model' format)",
     )
     parser.add_argument(
@@ -207,6 +208,9 @@ async def main() -> int:
         "requested_outputs": [],
         # single-researcher pipeline
         "search_plan": [],
+        "research_plan": {},
+        "decision_trace": [],
+        "model_usage": [],
         "search_results": [],
         "fetched_pages": [],
         # multi-researcher pipeline

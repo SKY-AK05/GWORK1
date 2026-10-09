@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import re
 import sys
 from datetime import datetime, timezone
@@ -27,7 +28,7 @@ def _parser() -> argparse.ArgumentParser:
     research.add_argument("--website", default=None, help="Optional known website or domain")
     research.add_argument("--depth", choices=["quick", "standard", "comprehensive"], default="standard")
     research.add_argument("--recent", default=None, help="Optional period, e.g. 'last 12 months'")
-    research.add_argument("--model", default="openrouter/gemini-3-flash-preview")
+    research.add_argument("--model", default=os.getenv("AI_MODEL", "openrouter/gemini-3-flash-preview"))
     research.add_argument("--writer-model", default=None)
     research.add_argument("--num-researchers", type=int, default=1)
     research.add_argument("--rag", action="store_true")

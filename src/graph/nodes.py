@@ -43,12 +43,14 @@ from src.schemas.research import (
     ReportSection,
     ProspectRecord,
     ResearchMemo,
+    ResearchPlan,
     SourceVerdict,
     TaskAnalysis,
     WriterReport,
 )
 from src.tools.web_fetch import WebFetchTool
 from src.tools.web_search import WebSearchTool
+from src.tools.registry import validate_plan_tools
 from src.verification.company_intelligence import (
     detect_contradictions,
     extract_business_contacts,
@@ -559,7 +561,7 @@ async def detect_mode_node(state: ResearchState) -> dict:
 # ═══════════════════════════════════════════════════════════════════════════ #
 
 async def plan_search_node(state: ResearchState) -> dict:
-    """Generate a list of web search queries for the task."""
+    """Use the configured model to propose a bounded, registry-validated plan."""
     task = state["task"]
     task_mode = state["task_mode"]
     comparison_targets = state.get("comparison_targets", [])
@@ -569,23 +571,34 @@ async def plan_search_node(state: ResearchState) -> dict:
 
     llm = _research_llm(state)
 
-    response = await llm.ainvoke(
-        [
-            SystemMessage(
-                content=(
-                    f"You are a research planning assistant. "
-                    f"Return a JSON array with exactly {n_queries} short web search queries "
-                    f"that together would help answer the user's question. "
-                    f"Vary the angle: include a general overview query, a technical-depth query, "
-                    f"and (if appropriate) a recent-news or data-focused query."
-                )
-            ),
-            HumanMessage(content=task),
-        ]
-    )
     try:
-        queries = [str(q).strip() for q in json.loads(response.content) if str(q).strip()][:n_queries]
-    except Exception:
+        plan = await _invoke_structured(
+            llm,
+            ResearchPlan,
+            [
+                SystemMessage(
+                    content=(
+                        "Create an evidence-driven research plan. Use only these tool categories: "
+                        "discovery, crawling, registry, browser. Never invent tool names. "
+                        f"Return at most {n_queries} plan items, each with concise queries, required fields, "
+                        "preferred source types, identity signals, evidence requirements, risks, priority, "
+                        "and budget. Browser research is not enabled by default."
+                    )
+                ),
+                HumanMessage(content=task),
+            ],
+        )
+        validated = validate_plan_tools(plan.model_dump())
+        plan_items = validated["items"]
+        queries = [query.strip() for item in plan_items for query in item.get("queries", []) if query.strip()]
+        queries = queries[:n_queries]
+        decision_trace = [{"stage": "planning", "decision": "model_plan", "rationale": plan.rationale, "rejected": validated["rejected"]}]
+        research_plan = plan.model_dump()
+    except Exception as exc:
+        queries = []
+        decision_trace = [{"stage": "planning", "decision": "deterministic_fallback", "rationale": f"Model planning unavailable: {type(exc).__name__}"}]
+        research_plan = {"items": [], "stopping_conditions": ["provider unavailable or invalid plan"], "rationale": "fallback"}
+    if not queries:
         queries = [task]
 
     deterministic = _deterministic_social_queries(task, depth)
@@ -593,7 +606,7 @@ async def plan_search_node(state: ResearchState) -> dict:
     for query in (queries or [task]) + deterministic:
         if query and query not in combined:
             combined.append(query)
-    return {"search_plan": combined}
+    return {"search_plan": combined, "research_plan": research_plan, "decision_trace": decision_trace}
 
 
 # ═══════════════════════════════════════════════════════════════════════════ #

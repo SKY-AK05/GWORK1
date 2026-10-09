@@ -32,6 +32,29 @@ class TaskAnalysis(BaseModel):
     )
 
 
+class ResearchPlanItem(BaseModel):
+    """One bounded, evidence-oriented research question selected by the model."""
+
+    question: str
+    required_fields: List[str] = Field(default_factory=list)
+    queries: List[str] = Field(default_factory=list)
+    tool_category: str
+    preferred_source_types: List[str] = Field(default_factory=list)
+    identity_signals: List[str] = Field(default_factory=list)
+    evidence_required: List[str] = Field(default_factory=list)
+    risks: List[str] = Field(default_factory=list)
+    priority: str = "medium"
+    budget: int = 1
+
+
+class ResearchPlan(BaseModel):
+    """Model proposal validated against the application's permitted tool registry."""
+
+    items: List[ResearchPlanItem] = Field(default_factory=list)
+    stopping_conditions: List[str] = Field(default_factory=list)
+    rationale: str = ""
+
+
 class ResearchSource(BaseModel):
     """A single evidence-bearing source gathered by the researcher node."""
 

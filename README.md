@@ -216,6 +216,11 @@ OPENAI_API_KEY=
 ANTHROPIC_API_KEY=
 GOOGLE_API_KEY=
 
+# Optional Azure AI Foundry OpenAI-compatible deployment
+AZURE_AI_API_KEY=
+AZURE_AI_ENDPOINT=https://<resource>.services.ai.azure.com/openai/v1
+AZURE_AI_DEPLOYMENT=gpt-5.4-mini
+
 # Optional — Firecrawl gives better scraping quality than the free DDGS fallback
 FIRECRAWL_API_KEY=
 TAVILY_API_KEY=
@@ -228,6 +233,10 @@ LANGCHAIN_TRACING_V2=false
 LANGCHAIN_API_KEY=
 LANGCHAIN_PROJECT=DeepResearchAgent
 ```
+
+To use Azure for this project, set those values locally and select `--model azure/gpt-5.4-mini`. The AI key powers model-backed planning, permitted tool-category selection, follow-up gap analysis, memo/report synthesis, claim verification, and critique. It is not a search-engine key, registry key, or browser-session credential. `COMPANIES_HOUSE_API_KEY` remains a separate optional credential for UK registry checks.
+
+The browser helper in `src/browser/authorized.py` is opt-in and consent-gated. It opens the platform's normal login page in a temporary Playwright context; the user enters credentials directly there. The application never accepts passwords, exports cookies/storage state, sends session tokens to the model, bypasses CAPTCHA/MFA/OTP/paywalls, or accesses private messages. Persistent browser state requires explicit configuration and is disabled by default. If browser access is unavailable or cancelled, the public-source workflow continues and records the limitation.
 
 ---
 
