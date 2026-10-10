@@ -171,6 +171,7 @@ def classify_role_status(role_text: str) -> str:
 
 
 def extract_roles(pages: list[dict[str, Any]], target_name: Optional[str] = None) -> list[dict[str, Any]]:
+    from src.validation import is_valid_person_name
     results = []
     role_re = re.compile(r"(?i)([A-Z][A-Za-z.'-]{2,}(?:\s+[A-Z][A-Za-z.'-]{2,}){0,3})\s*[-,:|—]\s*(founder|co[- ]?founder|ceo|chief executive officer|director|head of [A-Za-z ]+|advisor|manager)")
     historical_re = re.compile(r"(?i)(former|ex-)\s*(founder|co[- ]?founder|ceo|chief executive officer|director|advisor|manager)\s+([A-Z][A-Za-z.'-]{2,}(?:\s+[A-Z][A-Za-z.'-]{2,}){0,3})")
@@ -180,13 +181,18 @@ def extract_roles(pages: list[dict[str, Any]], target_name: Optional[str] = None
         for line in page.get("content", "").splitlines():
             match = role_re.search(line)
             if match:
+                candidate_person = match.group(1).strip()
+                if not is_valid_person_name(candidate_person, target_name=target_name):
+                    continue
                 role_text = match.group(0).strip()
-                results.append(_record(page.get("url", ""), line, page.get("retrieved_at"), person_name=match.group(1).strip(), role=match.group(2).strip(), role_status=classify_role_status(role_text), confidence="medium", verification_status="candidate"))
+                results.append(_record(page.get("url", ""), line, page.get("retrieved_at"), person_name=candidate_person, role=match.group(2).strip(), role_status=classify_role_status(role_text), confidence="medium", verification_status="candidate"))
                 continue
             historical = historical_re.search(line)
             if historical:
-                role_text = historical.group(0).strip()
-                results.append(_record(page.get("url", ""), line, page.get("retrieved_at"), person_name=historical.group(3).strip(), role=historical.group(2).strip(), role_status="historical", confidence="medium", verification_status="candidate"))
+                candidate_person = historical.group(3).strip()
+                if not is_valid_person_name(candidate_person, target_name=target_name):
+                    continue
+                results.append(_record(page.get("url", ""), line, page.get("retrieved_at"), person_name=candidate_person, role=historical.group(2).strip(), role_status="historical", confidence="medium", verification_status="candidate"))
     return results
 
 
@@ -275,26 +281,43 @@ def extract_entity_relationships(pages: list[dict[str, Any]], target_name: Optio
 
 def extract_workforce_signals(pages: list[dict[str, Any]], target_name: Optional[str] = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Extract public hiring/workforce signals; never infer employment from a mention."""
+    from src.validation import is_valid_job_title, clean_job_title
     workforce: list[dict[str, Any]] = []
     hiring: list[dict[str, Any]] = []
     job_terms = ("careers", "jobs", "vacancy", "we're hiring", "join our team", "open role", "job description")
     mode_terms = ("remote", "hybrid", "on-site", "onsite", "office-based", "work from home")
     skill_terms = ("requirements", "skills", "experience with", "proficiency in", "must have")
+    aggregator_domains = ("tracxn.com", "zaubacorp.com", "thecompanycheck.com", "wikipedia.org", "tofler.in")
+
     for page in pages:
         if not _page_matches_target(page, target_name):
             continue
         url = page.get("url", "")
         title = page.get("title", "")
         page_text = page.get("content", "")
+
+        # Aggregators often have 'jobs' or 'careers' in nav footers; ignore unless specific job subpath
+        if any(agg in url.lower() for agg in aggregator_domains) and not any(sub in url.lower() for sub in ("/careers", "/jobs", "/openings")):
+            continue
+
         is_job_page = any(term in f"{url} {title} {page_text}".lower() for term in job_terms)
         for line in page_text.splitlines():
             lowered = line.lower()
             if is_job_page and (any(term in lowered for term in mode_terms) or any(term in lowered for term in skill_terms)):
                 modes = [term for term in mode_terms if term in lowered]
                 skills = [term for term in ("python", "javascript", "typescript", "sql", "sales", "marketing", "operations", "finance", "design", "react", "aws") if term in lowered]
+
+                # Try to extract a valid job title from title or line
+                candidate_role = clean_job_title(title)
+                if not is_valid_job_title(candidate_role):
+                    candidate_role = clean_job_title(line)
+                if not is_valid_job_title(candidate_role):
+                    # Never populate URLs or generic descriptions as job roles
+                    continue
+
                 hiring.append(_record(
                     url, line, page.get("retrieved_at"), signal_type="public_job_posting",
-                    role=title[:160], work_arrangement=modes or ["not stated"], required_skills=skills,
+                    role=candidate_role, work_arrangement=modes or ["not stated"], required_skills=skills,
                     verification_status="published_unverified", confidence="medium",
                 ))
             if any(word in lowered for word in ("joined", "appointed", "promoted", "left the company", "departed", "new ceo", "new director")):

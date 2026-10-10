@@ -14,6 +14,16 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
+from src.validation import (
+    extract_canonical_company_name,
+    is_invalid_company_name,
+    is_valid_person_name,
+    is_valid_job_title,
+    clean_job_title,
+    reconcile_registry_status,
+    deduplicate_paragraphs,
+)
+
 # Common crawler/aggregator boilerplate patterns to strip out
 _BOILERPLATE_PATTERNS = [
     re.compile(r"due diligence company risk", re.IGNORECASE),
@@ -36,7 +46,8 @@ _AGGREGATOR_DOMAINS = {
 _INVALID_NAMES = {
     "solutions-for-startup", "release", "project", "marketing", "campaign",
     "sales", "employees", "company", "director", "din", "candidate", "general",
-    "user", "admin", "unnamed", "none", "n/a", "null"
+    "user", "admin", "unnamed", "none", "n/a", "null", "revenue", "board",
+    "board-of", "board members", "investigate the name", "the name", "investigate"
 }
 
 
@@ -114,10 +125,7 @@ def build_company_report_markdown(
 
     state = state or {}
     task_query = data.get("question") or state.get("task") or "Company Investigation"
-    company_name = state.get("company")
-    if not company_name:
-        m = re.search(r"['\"]?([A-Za-z0-9\s\.\-]{2,40})['\"]?", task_query)
-        company_name = m.group(1).strip() if m else "Company"
+    company_name = extract_canonical_company_name(task_query, state)
 
     exec_summary = clean_text(data.get("executive_summary", ""))
     confidence_summary = clean_text(data.get("confidence_summary", ""))
@@ -153,29 +161,49 @@ def build_company_report_markdown(
 
     reg_verification = data.get("registry_verification") or {}
     reg_outcome = reg_verification.get("outcome", "inconclusive_verification")
-    reg_note = reg_verification.get("error") or ""
 
     india_verification = data.get("india_verification") or {}
     india_registries = india_verification.get("registries") or {}
 
     candidates = data.get("identity_candidates") or []
     # Find best candidate with valid legal name or identifier
-    named_candidates = [c for c in candidates if clean_text(c.get("name") or c.get("legal_name")).lower() not in _INVALID_NAMES]
+    named_candidates = [
+        c for c in candidates
+        if not is_invalid_company_name(clean_text(c.get("legal_name") or c.get("name") or ""))
+    ]
     primary_candidate = named_candidates[0] if named_candidates else (candidates[0] if candidates else {})
 
-    legal_name = primary_candidate.get("legal_name") or primary_candidate.get("name") or company_name
-    jurisdiction = primary_candidate.get("jurisdiction") or primary_candidate.get("country") or state.get("country") or "India"
-    reg_number = primary_candidate.get("registration_number") or primary_candidate.get("company_number") or primary_candidate.get("candidate_id") or "Not confirmed in public registry"
+    legal_candidate_name = clean_text(primary_candidate.get("legal_name") or primary_candidate.get("name") or "")
+    if not legal_candidate_name or is_invalid_company_name(legal_candidate_name):
+        legal_name = company_name
+    else:
+        legal_name = legal_candidate_name
+
+    jurisdiction = clean_text(primary_candidate.get("jurisdiction") or primary_candidate.get("country") or state.get("country") or "India")
+    raw_reg = clean_text(primary_candidate.get("registration_number") or primary_candidate.get("company_number") or primary_candidate.get("candidate_id") or "")
+    has_reg = bool(raw_reg and raw_reg.lower() not in {"none", "not confirmed in public registry", "null", "n/a", ""})
+    reg_number = raw_reg if has_reg else "Not found in reviewed sources"
+
     address = primary_candidate.get("registered_address") or primary_candidate.get("address") or "Self-reported operating address"
     website = primary_candidate.get("official_domain") or primary_candidate.get("website") or state.get("website") or "Not formally registered domain"
+
+    reg_rec = reconcile_registry_status(
+        jurisdiction=jurisdiction,
+        reg_outcome=reg_outcome,
+        india_verification=india_verification,
+        has_registration_number=has_reg,
+    )
+    reg_status_display = reg_rec["official_status"]
+    reg_note_display = reg_rec["official_note"]
+    reg_number_status = reg_rec["reg_number_status"]
 
     lines.append(f"| **Legal Entity Name** | {legal_name} | {primary_candidate.get('verification_status', 'candidate')} |")
     lines.append(f"| **Brand / Trading Name** | {company_name} | corroborated |")
     lines.append(f"| **Jurisdiction / Country** | {jurisdiction} | corroborated |")
-    lines.append(f"| **Registration / CIN / LLPIN** | {reg_number} | {reg_outcome} |")
+    lines.append(f"| **Registration / CIN / LLPIN** | {reg_number} | {reg_number_status} |")
     lines.append(f"| **Address / Location** | {address} | company_reported |")
     lines.append(f"| **Official Website / Domain** | {website} | verified |")
-    lines.append(f"| **Official Registry Status** | {reg_outcome} | {reg_note or 'Searched authoritative registries'} |")
+    lines.append(f"| **Official Registry Status** | {reg_status_display} | {reg_note_display} |")
     lines.append("")
 
     if india_registries:
@@ -196,7 +224,7 @@ def build_company_report_markdown(
     clean_candidates = []
     for c in candidates:
         c_name = clean_text(c.get("name") or c.get("legal_name") or "")
-        if not c_name or c_name.lower() in _INVALID_NAMES or is_boilerplate(c_name):
+        if not c_name or is_invalid_company_name(c_name) or is_boilerplate(c_name):
             continue
         c_id = clean_text(c.get("registration_number") or c.get("company_number") or c.get("candidate_id") or "None")
         key = (c_name.lower(), c_id.lower())
@@ -221,6 +249,23 @@ def build_company_report_markdown(
         lines.append("No ambiguous candidate entities were found; operations center on the primary reported entity.")
         lines.append("")
 
+    # Paragraph deduplication tracking
+    seen_paragraphs: set[str] = set()
+
+    def _emit_narrative_paragraphs(text: str) -> list[str]:
+        out = []
+        chunks = re.split(r"\n\s*\n|\r\n\s*\r\n", str(text or ""))
+        for chunk in chunks:
+            chunk_cleaned = clean_text(chunk)
+            if not chunk_cleaned or is_boilerplate(chunk_cleaned):
+                continue
+            sig = re.sub(r"[^a-z0-9]", "", chunk_cleaned.lower())[:100]
+            if sig in seen_paragraphs:
+                continue
+            seen_paragraphs.add(sig)
+            out.append(chunk_cleaned)
+        return out
+
     # 4. Business Overview
     lines += [
         "## 4. Business Overview",
@@ -232,23 +277,25 @@ def build_company_report_markdown(
         model = clean_text(biz_analysis.get("business_model") or biz_analysis.get("operations") or "")
         markets = clean_text(biz_analysis.get("target_markets") or biz_analysis.get("beneficiaries") or "")
         if purpose:
-            lines.append(f"**Mission & Purpose:** {purpose}")
-            lines.append("")
+            for p in _emit_narrative_paragraphs(f"**Mission & Purpose:** {purpose}"):
+                lines.append(p)
+                lines.append("")
         if model:
-            lines.append(f"**Business Model & Operations:** {model}")
-            lines.append("")
+            for p in _emit_narrative_paragraphs(f"**Business Model & Operations:** {model}"):
+                lines.append(p)
+                lines.append("")
         if markets:
-            lines.append(f"**Target Market & Beneficiaries:** {markets}")
-            lines.append("")
+            for p in _emit_narrative_paragraphs(f"**Target Market & Beneficiaries:** {markets}"):
+                lines.append(p)
+                lines.append("")
 
-    # Extract thematic narratives from sections if available
     sections = data.get("sections") or []
     for sec in sections:
         title = clean_text(sec.get("title", ""))
-        narrative = clean_text(sec.get("narrative", ""))
+        raw_narrative = str(sec.get("narrative") or "")
         if any(k in title.lower() for k in ["business", "purpose", "market", "model"]):
-            if narrative and narrative not in lines:
-                lines.append(narrative)
+            for p in _emit_narrative_paragraphs(raw_narrative):
+                lines.append(p)
                 lines.append("")
 
     # 5. Products and Services
@@ -259,17 +306,24 @@ def build_company_report_markdown(
     prod_found = False
     for sec in sections:
         title = clean_text(sec.get("title", ""))
-        narrative = clean_text(sec.get("narrative", ""))
+        raw_narrative = str(sec.get("narrative") or "")
         if any(k in title.lower() for k in ["product", "service", "offering", "solution"]):
-            lines.append(narrative)
-            lines.append("")
-            prod_found = True
+            p_emitted = _emit_narrative_paragraphs(raw_narrative)
+            for p in p_emitted:
+                lines.append(p)
+                lines.append("")
+            if p_emitted:
+                prod_found = True
             if sec.get("claims"):
+                claims_added = False
                 for cl in sec.get("claims", []):
                     c_text = clean_text(cl.get("claim", ""))
                     if c_text and not is_boilerplate(c_text):
                         lines.append(f"- {c_text} {_format_confidence_badge(cl.get('confidence', ''))}")
-                lines.append("")
+                        claims_added = True
+                        prod_found = True
+                if claims_added:
+                    lines.append("")
 
     if not prod_found:
         lines.append(f"Products and service offerings documented from public channels include core specialized solutions, talent development, and advisory programs provided by {company_name}.")
@@ -283,11 +337,12 @@ def build_company_report_markdown(
     cust_found = False
     for sec in sections:
         title = clean_text(sec.get("title", ""))
-        narrative = clean_text(sec.get("narrative", ""))
+        raw_narrative = str(sec.get("narrative") or "")
         if any(k in title.lower() for k in ["customer", "partner", "beneficiar", "client", "geograph"]):
-            lines.append(narrative)
-            lines.append("")
-            cust_found = True
+            for p in _emit_narrative_paragraphs(raw_narrative):
+                lines.append(p)
+                lines.append("")
+                cust_found = True
 
     contacts = data.get("business_contacts") or []
     clean_contacts = []
@@ -296,7 +351,6 @@ def build_company_report_markdown(
         c_type = clean_text(contact.get("type") or "Public Channel")
         if not c_val or is_boilerplate(c_val):
             continue
-        # Drop contacts belonging to aggregator platforms
         if any(domain in c_val.lower() for domain in _AGGREGATOR_DOMAINS):
             continue
         clean_contacts.append((c_type, c_val))
@@ -324,10 +378,10 @@ def build_company_report_markdown(
         status = clean_text(r.get("role_status") or "current_claim")
         conf = clean_text(r.get("confidence") or "medium")
         src = clean_text(r.get("source_url") or "")
-        # Filter out generic words or aggregator noise
-        if not person or person.lower() in _INVALID_NAMES or is_boilerplate(person):
+
+        if not is_valid_person_name(person, target_name=company_name):
             continue
-        if len(person.split()) < 2 and person.lower() in {"founder", "manager", "director", "employee"}:
+        if not role_title or is_boilerplate(role_title):
             continue
         key = (person.lower(), role_title.lower())
         if key in seen_roles:
@@ -345,6 +399,9 @@ def build_company_report_markdown(
         for person, role_title, status, conf, src in clean_roles:
             src_display = f"[Source]({src})" if src and src.startswith("http") else "Public Listing"
             lines.append(f"| {person} | {role_title} | {status} | {conf} | {src_display} |")
+        lines.append("")
+    else:
+        lines.append("No verified leadership records were established from reviewed primary registries or verified company channels. Unverified references or candidate names in secondary sources remain unresolved.")
         lines.append("")
 
     workforce = data.get("workforce_signals") or []
@@ -368,12 +425,14 @@ def build_company_report_markdown(
     clean_hiring = []
     seen_hiring = set()
     for h in hiring:
-        pos = clean_text(h.get("position") or h.get("title") or h.get("role") or "")
+        pos = clean_job_title(h.get("position") or h.get("title") or h.get("role") or "")
         dept = clean_text(h.get("department") or h.get("skills") or "General")
         loc = clean_text(h.get("location") or jurisdiction)
         arr = clean_text(h.get("arrangement") or h.get("work_arrangement") or "On-site / Hybrid")
+        arr = re.sub(r"[\[\]'\"]", "", arr).strip() or "Not stated"
         src = clean_text(h.get("source_url") or "")
-        if not pos or pos.lower() in _INVALID_NAMES or is_boilerplate(pos):
+
+        if not is_valid_job_title(pos):
             continue
         key = (pos.lower(), loc.lower())
         if key in seen_hiring:
@@ -391,7 +450,7 @@ def build_company_report_markdown(
             lines.append(f"| {pos} | {dept} | {loc} | {arr} | {src_display} |")
         lines.append("")
     else:
-        lines.append("No active public hiring openings were indexed during the observation window.")
+        lines.append("No active public hiring openings or verified job descriptions were identified during the observation window.")
         lines.append("")
 
     # 9. Recent Developments
@@ -449,7 +508,25 @@ def build_company_report_markdown(
     if contradictions:
         lines += ["### Identified Contradictions & Epistemic Gaps", ""]
         for c in contradictions:
-            c_desc = clean_text(c.get("description") or c.get("note") or str(c))
+            if isinstance(c, dict):
+                field = c.get("field", "Attribute").replace("_", " ").title()
+                vals = []
+                for v_group in c.get("values", []):
+                    claims = v_group.get("claims", [])
+                    if claims and isinstance(claims[0], dict) and claims[0].get("value"):
+                        val_text = clean_text(claims[0].get("value"))
+                        if val_text and not is_boilerplate(val_text):
+                            vals.append(val_text[:80])
+                    elif v_group.get("normalized_value"):
+                        vals.append(clean_text(v_group["normalized_value"])[:80])
+                if len(vals) >= 2:
+                    c_desc = f"**{field} Inconsistency**: Conflicting representations identified across sources ('{vals[0]}' vs '{vals[1]}')."
+                elif vals:
+                    c_desc = f"**{field} Inconsistency**: Discrepant representations observed across reviewed sources ('{vals[0]}')."
+                else:
+                    c_desc = f"**{field} Inconsistency**: Conflicting values recorded across independent sources."
+            else:
+                c_desc = clean_text(c)
             if c_desc and not is_boilerplate(c_desc):
                 lines.append(f"- {c_desc} **[Contradiction]**")
         lines.append("")
@@ -458,13 +535,21 @@ def build_company_report_markdown(
     lines += [
         "## 11. Direct Answers to the Original Questions",
         "",
-        f"1. **Identity & Registration**: Investigated '{company_name}' in {jurisdiction}. Identified operating presence and candidate brand/legal entities; registry match status is `{reg_outcome}`.",
-        f"2. **Business Model**: Operating as a specialized enterprise delivering defined professional products, data operations, and inclusion services.",
-        f"3. **Leadership & People**: Confirmed key personnel including founders and core contributors with designated role statuses.",
-        f"4. **Workforce & Working Arrangements**: Assessed team composition, diversity focus, and public working arrangements.",
-        "5. **Evidence Grounding**: All verified findings are anchored to cited public sources; unverified claims are classified and isolated.",
-        "",
+        f"1. **Identity & Registration**: Investigated '{company_name}' in {jurisdiction}. Candidate legal entity: '{legal_name}'. Official registry verification status: `{reg_status_display}` ({reg_note_display}).",
+        f"2. **Business Model**: Operating as an enterprise delivering specialized commercial offerings. Core activities and target sectors are documented in Section 4.",
     ]
+    if clean_roles:
+        lines.append(f"3. **Leadership & People**: Identified and corroborated key personnel ({len(clean_roles)} leadership records identified); detailed role statuses are documented in Section 7.")
+    else:
+        lines.append("3. **Leadership & People**: No verified leadership records were confirmed from primary official registries; executive personnel remain unresolved.")
+
+    if clean_hiring:
+        lines.append(f"4. **Workforce & Working Arrangements**: Identified active public postings; location and arrangement details are detailed in Section 8.")
+    else:
+        lines.append("4. **Workforce & Working Arrangements**: No active verified job postings found in reviewed sources; working arrangements remain unconfirmed.")
+
+    lines.append(f"5. **Evidence Grounding**: All verified findings are anchored to cited public sources; unverified claims are classified and isolated.")
+    lines.append("")
 
     # Recommendations if present
     recs = data.get("recommendations") or []
@@ -853,7 +938,8 @@ def generate_final_reports(
     compat_md_path.write_text(markdown_content, encoding="utf-8")
 
     # 2. Build HTML for PDF rendering
-    company_name = (state or {}).get("company") or "Company"
+    task_query = data.get("question") or (state or {}).get("task") or ""
+    company_name = extract_canonical_company_name(task_query, state)
     html_content = build_report_html(markdown_content, title=f"Research Report: {company_name}")
 
     pdf_report_path = workdir / "company_research_report.pdf"
@@ -896,13 +982,21 @@ def retry_pdf_generation(workdir: Union[str, Path]) -> Dict[str, Any]:
     workdir = Path(workdir)
     md_path = workdir / "company_research_report.md"
     json_path = workdir / "company_research.json"
+    meta_path = workdir / "run_metadata.json"
 
     if not md_path.is_file() and not json_path.is_file():
         raise FileNotFoundError(f"Neither company_research_report.md nor company_research.json found in {workdir}")
 
+    state = {}
+    if meta_path.is_file():
+        try:
+            state = json.loads(meta_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
     if json_path.is_file():
         data = json.loads(json_path.read_text(encoding="utf-8"))
-        return generate_final_reports(data, workdir)
+        return generate_final_reports(data, workdir, state=state)
 
     md_content = md_path.read_text(encoding="utf-8")
     html_content = build_report_html(md_content)

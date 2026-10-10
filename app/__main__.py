@@ -72,6 +72,8 @@ async def _run(args: argparse.Namespace) -> int:
     forwarded = [
         "run_mvp_research_system.py",
         "--task", task,
+        "--company", args.company,
+        "--country", args.country,
         "--model", args.model,
         "--depth", depth,
         "--num-researchers", str(args.num_researchers),

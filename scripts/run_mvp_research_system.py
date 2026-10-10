@@ -55,6 +55,8 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--task", required=True, help="Research question to investigate")
+    parser.add_argument("--company", default=None, help="Target company or brand name")
+    parser.add_argument("--country", default=None, help="Target country or jurisdiction")
     parser.add_argument(
         "--tag",
         default="mvp_research_system",
@@ -202,6 +204,8 @@ async def main() -> int:
 
     initial_state = {
         "task": args.task,
+        "company": getattr(args, "company", None),
+        "country": getattr(args, "country", None),
         "workdir": workdir,
         "model_name": args.model,
         "writer_model_name": writer_model,
