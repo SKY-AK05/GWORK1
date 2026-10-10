@@ -45,3 +45,67 @@ def test_ssrf_boundary_and_artifact_allowlist():
     assert not is_safe_public_url("file:///etc/passwd")
     assert "company_research.json" in ALLOWED_ARTIFACTS
     assert "../../.env" not in ALLOWED_ARTIFACTS
+
+
+def test_multi_source_same_company_resolution():
+    from webapp.discovery import _link_identity_records, _candidate
+
+    candidates = [
+        _candidate(
+            "LTIMindtree is now LTM | It's time to Outcreate", "India",
+            source="https://www.ltm.com", source_title="LTIMindtree is now LTM | It's time to Outcreate",
+            description="LTM is an AI-centric global technology services company and the Business Creativity partner to the world's largest enterprises.",
+        ),
+        _candidate(
+            "LTM - LinkedIn", "India",
+            source="https://www.linkedin.com/company/ltmindtree", source_title="LTM - LinkedIn",
+            description="LTM — a Larsen & Toubro company — is an AI-centric global technology services company.",
+        ),
+        _candidate(
+            "LTIMindtree - Wikipedia", "India",
+            source="https://en.wikipedia.org/wiki/LTIMindtree", source_title="LTIMindtree - Wikipedia",
+            description="LTM Limited (formerly LTIMindtree Limited) is an Indian multinational IT services company based in Mumbai. A subsidiary of Larsen & Toubro.",
+        ),
+        _candidate(
+            "LTM: AI-Centric Technology & Business Creativity Partner", "India",
+            source="https://www.ltm.com/about-us", source_title="LTM: AI-Centric Technology & Business Creativity Partner",
+            description="LTM is an AI-centric global technology services company...",
+        ),
+    ]
+
+    groups = _link_identity_records(candidates, query="LTM")
+    assert len(groups) == 1
+    group = groups[0]
+    assert group["resolution"] == "confirmed_same_company"
+    assert "Same company confirmed" in group["resolution_label"]
+    assert len(group["records"]) == 4
+    # Explains to the user why they are linked
+    assert "Verified as the same corporate entity across 4 sources" in group["resolution_reason"]
+    assert "ltm.com" in group["resolution_reason"]
+    # Canonical clean entity
+    assert "LTM" in group["canonical_candidate"]["legal_name"]
+    assert "ltm.com" in (group["canonical_candidate"]["website"] or "")
+
+
+def test_distinct_companies_are_not_merged():
+    from webapp.discovery import _link_identity_records, _candidate
+
+    candidates = [
+        _candidate(
+            "Apex Auto Components Ltd", "India",
+            source="https://apexauto.in", source_title="Apex Auto Components Ltd",
+            description="Automotive equipment and transmission parts manufacturer in Pune.",
+        ),
+        _candidate(
+            "Apex Laboratories Pvt Ltd", "India",
+            source="https://apexlab.com", source_title="Apex Laboratories Pvt Ltd",
+            description="Pharmaceuticals and healthcare formulations in Chennai.",
+        ),
+    ]
+
+    groups = _link_identity_records(candidates, query="Apex")
+    assert len(groups) == 2
+    for g in groups:
+        assert g["resolution"] == "distinct_record"
+        assert "Distinct corporate record" in g["resolution_reason"]
+

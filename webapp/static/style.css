@@ -375,6 +375,24 @@ input:focus, select:focus {
   color: #a64750;
 }
 
+.badge-confirmed {
+  background: #e4f6ef;
+  color: #1a6f4e;
+  border: 1px solid #b7ecd6;
+}
+
+.badge-possible {
+  background: #fff4e5;
+  color: #9c6014;
+  border: 1px solid #fedcb3;
+}
+
+.badge-distinct {
+  background: #f1f4f8;
+  color: #556274;
+  border: 1px solid #d9e1ec;
+}
+
 .select-btn, .ghost {
   border: 1px solid var(--line);
   background: #ffffff;
@@ -571,8 +589,50 @@ input:focus, select:focus {
   color: #495669;
   line-height: 1.5;
   border-left: 3px solid var(--cyan);
-  padding-left: 11px;
+  padding: 8px 12px;
   margin: 14px 0 0;
+  border-radius: 0 6px 6px 0;
+}
+
+.verified-callout {
+  border-left: 3px solid #23a06a !important;
+  background: #f1faf5;
+  color: #175438;
+}
+
+.possible-callout {
+  border-left: 3px solid #e08b1a !important;
+  background: #fffaf0;
+  color: #7d4905;
+}
+
+.distinct-callout {
+  border-left: 3px solid #7d8b9e !important;
+  background: #f7f9fb;
+  color: #3b4756;
+}
+
+.identity-summary-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  margin-bottom: 16px;
+}
+
+.identity-summary-banner.same-company {
+  background: #ebf9f2;
+  border: 1px solid #c2eed9;
+  color: #14593c;
+}
+
+.identity-summary-banner.multiple-companies {
+  background: #f4f6fa;
+  border: 1px solid #dde3eb;
+  color: #2b394e;
 }
 
 .linked-records {

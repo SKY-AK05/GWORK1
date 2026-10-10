@@ -18,6 +18,20 @@ function badgeClass(status) { return String(status || '').toLowerCase().replace(
 
 function renderCandidates(data) {
   $('result-count').textContent = data.group_total ? `${data.group_total} identity group${data.group_total === 1 ? '' : 's'} · ${data.total} records` : 'no matches';
+  
+  let bannerHtml = '';
+  if (data.group_total === 1 && data.total > 1) {
+    bannerHtml = `<div class="identity-summary-banner same-company">
+      <span style="font-size: 18px;">✅</span>
+      <div><strong>Identity check complete:</strong> All ${data.total} search records refer to the <strong>same company</strong>. We have verified and unified their corroborating sources below for your review.</div>
+    </div>`;
+  } else if (data.group_total > 1) {
+    bannerHtml = `<div class="identity-summary-banner multiple-companies">
+      <span style="font-size: 18px;">⚖️</span>
+      <div><strong>Identity check complete:</strong> Detected ${data.group_total} distinct company entities across ${data.total} search records. Review the differences below before selecting.</div>
+    </div>`;
+  }
+
   $('coverage-note').textContent = data.error || `${data.coverage || 'Bounded public discovery'}${data.warnings?.length ? ' · ' + data.warnings.join(' ') : ''}`;
   const box=$('candidates');
   if (!data.candidates?.length) {
@@ -25,19 +39,41 @@ function renderCandidates(data) {
     box.innerHTML='<div class="empty-glyph">∅</div><strong>No verified candidate in the sources checked</strong><span>Try a spelling variation, broader keyword, country, city, or website.</span>';
   } else if (data.identity_groups?.length) {
     box.className='candidates';
-    box.innerHTML=data.identity_groups.map(group => {
-      const c=group.canonical_candidate;
-      const linked=group.records.filter(r => r.candidate_id !== c.candidate_id);
+    const groupsHtml = data.identity_groups.map(group => {
+      const c = group.canonical_candidate;
+      const linked = group.records.filter(r => r.candidate_id !== c.candidate_id);
+      const isConfirmed = group.resolution === 'confirmed_same_company';
+      const isPossible = group.resolution === 'possible_same_company';
+      const badgeClass = isConfirmed ? 'badge-confirmed' : (isPossible ? 'badge-possible' : 'badge-distinct');
+      const calloutClass = isConfirmed ? 'verified-callout' : (isPossible ? 'possible-callout' : 'distinct-callout');
+
       return `<article class="identity-group">
-        <div class="group-top"><div><span class="selected-label">IDENTITY RESOLUTION</span><h3>${escapeHtml(c.legal_name)}</h3><div class="candidate-meta">${escapeHtml(c.country)}${c.city ? ' · '+escapeHtml(c.city) : ''}${c.registration_number ? ' · '+escapeHtml(c.registration_number) : ''} · ${escapeHtml(c.status)}</div></div><span class="badge ${group.resolution==='possible_same_company'?'partial':'completed'}">${escapeHtml(group.resolution_label)}</span></div>
+        <div class="group-top">
+          <div>
+            <span class="selected-label">IDENTITY RESOLUTION</span>
+            <h3>${escapeHtml(c.legal_name)}</h3>
+            <div class="candidate-meta">${escapeHtml(c.country)}${c.city ? ' · '+escapeHtml(c.city) : ''}${c.registration_number ? ' · '+escapeHtml(c.registration_number) : ''}${c.website ? ' · '+escapeHtml(c.website) : ''} · ${escapeHtml(c.status)}</div>
+          </div>
+          <span class="badge ${badgeClass}">${escapeHtml(group.resolution_label)}</span>
+        </div>
         <p class="candidate-desc">${escapeHtml(c.description)}</p>
-        <p class="group-reason"><strong>Why linked:</strong> ${escapeHtml(group.resolution_reason)}</p>
-        ${linked.length ? `<details class="linked-records"><summary>Other names and linked records (${linked.length})</summary>${linked.map(r=>`<div class="linked-record"><strong>${escapeHtml(r.legal_name)}</strong><span>${escapeHtml(r.source_title)} · ${escapeHtml(r.website || r.source_url)}</span><small>${escapeHtml(r.match_strength)} · original ID ${escapeHtml(r.candidate_id)}</small></div>`).join('')}</details>` : ''}
+        <div class="group-reason ${calloutClass}"><strong>Why linked:</strong> ${escapeHtml(group.resolution_reason)}</div>
+        ${linked.length ? `<details class="linked-records" ${isConfirmed ? 'open' : ''}><summary>Corroborating sources & linked records (${linked.length})</summary>${linked.map(r=>`<div class="linked-record"><strong>${escapeHtml(r.legal_name)}</strong><span>${escapeHtml(r.source_title)} · <a href="${escapeHtml(r.source_url)}" target="_blank" rel="noopener">${escapeHtml(r.website || r.source_url)}</a></span><small>${escapeHtml(r.match_strength)} · source: ${escapeHtml(r.provider)}</small></div>`).join('')}</details>` : ''}
         ${group.evidence_gaps?.length ? `<details class="linked-records"><summary>What is still missing</summary><ul>${group.evidence_gaps.map(g=>`<li>${escapeHtml(g)}</li>`).join('')}</ul></details>` : ''}
-        <div class="group-bottom"><div class="candidate-source">↗ ${escapeHtml(c.source_title)} · ${escapeHtml(c.provider)} · verified ${escapeHtml(new Date(c.last_verified).toLocaleString())}</div><button class="select-btn" data-id="${escapeHtml(c.candidate_id)}">Select verified profile</button></div>
+        <div class="group-bottom">
+          <div class="candidate-source">↗ ${escapeHtml(c.source_title)} · ${escapeHtml(c.provider)} · verified ${escapeHtml(new Date(c.last_verified).toLocaleString())}</div>
+          <button class="select-btn" data-id="${escapeHtml(c.candidate_id)}">Select verified profile</button>
+        </div>
       </article>`;
     }).join('');
-    box.querySelectorAll('.select-btn').forEach(btn => btn.addEventListener('click', () => selectCandidate(data.candidates.find(c => c.candidate_id === btn.dataset.id))));
+
+    box.innerHTML = bannerHtml + groupsHtml;
+    box.querySelectorAll('.select-btn').forEach(btn => btn.addEventListener('click', () => {
+      const candId = btn.dataset.id;
+      const matchGroup = data.identity_groups?.find(g => g.canonical_candidate_id === candId || g.canonical_candidate?.candidate_id === candId);
+      const foundCand = matchGroup ? matchGroup.canonical_candidate : data.candidates?.find(c => c.candidate_id === candId);
+      if (foundCand) selectCandidate(foundCand);
+    }));
   } else {
     box.className='candidates';
     box.innerHTML=data.candidates.map(c => `<article class="candidate">
