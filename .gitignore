@@ -218,3 +218,7 @@ logs/
 .deepresearch-cache/
 baseline-artifacts/
 integrated-artifacts/
+
+# Phase 6 local web runtime state
+webapp/data/jobs/
+webapp/data/*.log

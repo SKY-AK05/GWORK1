@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Zerone Prospect Intelligence — evidence-led company research">
+  <title>Zerone Prospect Intelligence</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <a class="wordmark" href="/" aria-label="Zerone home"><span class="mark">·</span> zerone <span>prospect intelligence</span></a>
+      <div class="topmeta"><span class="pulse"></span><span id="system-status">checking system</span></div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="eyebrow">EVIDENCE-LED RESEARCH WORKSPACE</div>
+        <h1>Find the right entity<br><em>before</em> you research it.</h1>
+        <p class="lede">Start with a name or a narrow discovery filter. Review source-backed candidates. Then spend the research budget on the company you actually mean.</p>
+      </section>
+
+      <section class="workspace" aria-label="Company discovery workspace">
+        <aside class="command-panel">
+          <div class="panel-kicker">01 / DISCOVER</div>
+          <h2>Tell us who to look for.</h2>
+          <form id="discover-form">
+            <label>Company or partial name <span class="optional">optional with filters</span>
+              <input id="company" name="company" autocomplete="organization" placeholder="e.g. ORCHVATE or Orch">
+            </label>
+            <label>Country <span class="required">required</span>
+              <input id="country" name="country" value="India" list="countries" required>
+              <datalist id="countries"><option>India</option><option>United Kingdom</option><option>United States</option><option>Singapore</option><option>Australia</option></datalist>
+            </label>
+            <label>Known website <span class="optional">optional</span>
+              <input id="website" name="website" type="url" placeholder="https://example.com">
+            </label>
+            <div class="split-fields">
+              <label>City / region <span class="optional">optional</span><input id="city" placeholder="Kolkata"></label>
+              <label>Industry <span class="optional">optional</span><input id="industry" placeholder="software"></label>
+            </div>
+            <button class="primary" type="submit"><span>Run bounded discovery</span><span class="arrow">↗</span></button>
+            <p class="form-note">Discovery is capped and source-labelled. It never starts deep research.</p>
+          </form>
+          <div id="discover-error" class="notice error" hidden></div>
+        </aside>
+
+        <section class="evidence-panel">
+          <div class="panel-kicker">02 / SELECT AN ENTITY</div>
+          <div class="panel-heading"><h2>Candidate evidence</h2><span id="result-count" class="count">waiting</span></div>
+          <div id="coverage-note" class="coverage">Enter a company name, or add a country plus a narrowing filter.</div>
+          <div id="candidates" class="candidates empty-state"><div class="empty-glyph">⌁</div><strong>No candidates yet</strong><span>Search results will appear here with source, status, and match rationale.</span></div>
+          <div id="pagination" class="pagination" hidden><button id="prev-page" class="ghost">← Previous</button><span id="page-label"></span><button id="next-page" class="ghost">Next →</button></div>
+        </section>
+      </section>
+
+      <section id="research-section" class="research-section" hidden>
+        <div class="panel-kicker">03 / RESEARCH SELECTED ENTITY</div>
+        <div class="selected-card"><div><span class="selected-label">SELECTED CANDIDATE</span><h2 id="selected-name"></h2><p id="selected-detail"></p></div><button id="change-selection" class="ghost">Change selection</button></div>
+        <form id="research-form" class="research-options">
+          <label>Depth<select id="depth"><option value="quick">Quick</option><option value="standard" selected>Standard</option><option value="comprehensive">Comprehensive</option></select></label>
+          <label>Recent period<input id="recent" value="last 12 months"></label>
+          <button class="primary" type="submit">Start research <span class="arrow">↗</span></button>
+        </form>
+        <div id="job-card" class="job-card" hidden>
+          <div class="job-top"><div><span class="selected-label">RESEARCH JOB</span><h3 id="job-state">Queued</h3></div><span id="job-badge" class="badge queued">queued</span></div>
+          <div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div>
+          <div class="job-stage"><span id="job-stage">queued</span><span id="job-progress">0%</span></div>
+          <p id="job-message"></p>
+          <div id="artifact-list" class="artifacts"></div>
+        </div>
+      </section>
+    </main>
+    <footer><span>ZERONE / PROSPECT INTELLIGENCE</span><span>Partial is a valid result when the public record is incomplete.</span></footer>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

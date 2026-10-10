@@ -407,6 +407,41 @@ For each LLM call you can inspect the full prompt, raw response, parsed Pydantic
 
 ---
 
+## Phase 6 Web App
+
+The repository now includes a dependency-light web application in `webapp/`. It keeps the existing research engine as the only deep-research implementation and adds a separate discovery gate, explicit entity selection, bounded background jobs, real job status, and allowlisted artifact downloads.
+
+### Run locally
+
+```bash
+source /home/ubuntu/zerone-work/upstream/.venv/bin/activate
+PYTHONPATH=. ZERONE_WEB_PORT=8787 python -m webapp.server
+```
+
+Open `http://127.0.0.1:8787`. The server inherits the existing AI, search, crawler, and registry environment variables. Credentials are never returned by `/api/config`, embedded in the frontend, or written to job logs.
+
+The public API surface is:
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/health` | Safe service and research-engine health status |
+| `GET /api/config` | Capability presence only; never values |
+| `POST /api/discover` | Bounded source-backed discovery with pagination |
+| `POST /api/research` | Starts research only for a previously returned candidate ID |
+| `GET /api/jobs/:id` | Queued/running/completed/failed status and stage |
+| `GET /api/jobs/:id/artifacts` | Allowlisted artifact inventory |
+| `GET /api/jobs/:id/artifacts/:name` | Safe report/JSON/source download |
+
+The known-company flow is deliberately discovery-first: typing does not launch research, and the backend returns `409` if a caller tries to start a job without selecting a candidate from discovery. Blank-name searches require a country plus a narrowing filter. Discovery results are labelled as bounded public coverage, not as an exhaustive national registry.
+
+### Deployment
+
+The service is deployment-ready on a Python host that can run a background worker and persistent job/artifact storage. Set `ZERONE_WEB_HOST`, `ZERONE_WEB_PORT`, and the separate AI/search/registry variables through the host secret manager. Do not use GitHub Pages for this backend because it cannot run Python jobs or protect provider credentials. For a production deployment, put the service behind HTTPS, replace the in-process worker with a durable queue, and persist `webapp/data/jobs` in private storage.
+
+Phase 6 was locally tested and publicly verified in the sandbox at `https://8787-ikiddm8cbfwr8f25bm6wk-fe51947d.sg2.manus.computer`. This URL is temporary and is not a permanent production deployment.
+
+---
+
 ## Testing
 
 ```bash
