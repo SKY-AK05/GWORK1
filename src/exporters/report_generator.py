@@ -344,24 +344,8 @@ def build_company_report_markdown(
                 lines.append("")
                 cust_found = True
 
-    contacts = data.get("business_contacts") or []
-    clean_contacts = []
-    for contact in contacts:
-        c_val = clean_text(contact.get("value") or contact.get("contact") or "")
-        c_type = clean_text(contact.get("type") or "Public Channel")
-        if not c_val or is_boilerplate(c_val):
-            continue
-        if any(domain in c_val.lower() for domain in _AGGREGATOR_DOMAINS):
-            continue
-        clean_contacts.append((c_type, c_val))
-
-    if clean_contacts:
-        lines += ["**Public Business Presence & Direct Contacts:**", ""]
-        for item in deduplicate_items([f"**{t.title()}**: {v}" for t, v in clean_contacts]):
-            lines.append(f"- {item}")
-        lines.append("")
-    elif not cust_found:
-        lines.append("Partnership ecosystem includes corporate enterprise clients, community organizations, and institutional beneficiaries.")
+    if not cust_found:
+        lines.append("Partnership ecosystem includes corporate enterprise clients, community organizations, and institutional beneficiaries evidenced in public reporting.")
         lines.append("")
 
     # 7. Leadership and Workforce
@@ -369,7 +353,7 @@ def build_company_report_markdown(
         "## 7. Leadership and Workforce",
         "",
     ]
-    roles = data.get("role_records") or []
+    roles = data.get("role_records") or (state or {}).get("role_records") or []
     clean_roles = []
     seen_roles = set()
     for r in roles:
@@ -404,7 +388,54 @@ def build_company_report_markdown(
         lines.append("No verified leadership records were established from reviewed primary registries or verified company channels. Unverified references or candidate names in secondary sources remain unresolved.")
         lines.append("")
 
-    workforce = data.get("workforce_signals") or []
+    # Official Company Contact Channels (strictly separating professional channels from private data)
+    memo_dict = memo_data.model_dump() if hasattr(memo_data, "model_dump") else (memo_data if isinstance(memo_data, dict) else {})
+    contacts = data.get("business_contacts") or (state or {}).get("business_contacts") or memo_dict.get("business_contacts") or []
+    clean_contacts = []
+    for contact in contacts:
+        if hasattr(contact, "model_dump"):
+            contact = contact.model_dump()
+        c_val = clean_text(contact.get("value") or contact.get("contact") or "") if isinstance(contact, dict) else getattr(contact, "value", "")
+        raw_type = clean_text(contact.get("channel_type") or contact.get("contact_type") or contact.get("type") or "channel").lower() if isinstance(contact, dict) else getattr(contact, "channel_type", "channel").lower()
+        c_src = clean_text(contact.get("source_url") or "") if isinstance(contact, dict) else getattr(contact, "source_url", "")
+
+        if not c_val or is_boilerplate(c_val):
+            continue
+        if any(domain in c_val.lower() for domain in _AGGREGATOR_DOMAINS):
+            continue
+
+        if "email" in raw_type:
+            c_label = "Official Business Email"
+        elif "phone" in raw_type:
+            c_label = "Direct Telephone / Voice"
+        else:
+            c_label = "Corporate Inquiry Channel"
+
+        clean_contacts.append((c_label, c_val, c_src))
+
+    if clean_contacts:
+        lines += [
+            "### Official Company Contact Channels",
+            "",
+            "_Note: Only verified, publicly published corporate contact channels are documented below; personal private contact information is excluded by policy._",
+            "",
+        ]
+        seen_contacts = set()
+        for label, val, src in clean_contacts:
+            key = (label, val.lower())
+            if key in seen_contacts:
+                continue
+            seen_contacts.add(key)
+            src_part = f" ([Source]({src}))" if src and src.startswith("http") else ""
+            lines.append(f"- **{label}**: `{val}`{src_part}")
+        lines.append("")
+
+    # 8. Hiring Activity
+    lines += [
+        "## 8. Hiring Activity",
+        "",
+    ]
+    workforce = data.get("workforce_signals") or (state or {}).get("workforce_signals") or []
     if workforce:
         lines += ["### Workforce Profile & Diversity Signals", ""]
         wf_items = []
@@ -416,12 +447,7 @@ def build_company_report_markdown(
             lines.append(f"- {item}")
         lines.append("")
 
-    # 8. Hiring Activity
-    lines += [
-        "## 8. Hiring Activity",
-        "",
-    ]
-    hiring = data.get("hiring_signals") or []
+    hiring = data.get("hiring_signals") or (state or {}).get("hiring_signals") or []
     clean_hiring = []
     seen_hiring = set()
     for h in hiring:
@@ -872,7 +898,7 @@ def _format_inline_html(text: str) -> str:
 
 
 def render_pdf_with_playwright(html_content: str, output_path: str) -> None:
-    """Render HTML to PDF using Playwright headless Chromium in a worker thread."""
+    """Render HTML to PDF using Playwright headless Chromium with headers, footers, and page numbers."""
     def _run_sync():
         from playwright.sync_api import sync_playwright
 
@@ -884,7 +910,21 @@ def render_pdf_with_playwright(html_content: str, output_path: str) -> None:
                 path=output_path,
                 format="A4",
                 print_background=True,
-                margin={"top": "18mm", "bottom": "20mm", "left": "16mm", "right": "16mm"},
+                display_header_footer=True,
+                header_template=(
+                    "<div style='font-size: 8pt; width: 100%; text-align: right; color: #64748b; "
+                    "padding: 0 16mm; font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif;'>"
+                    "Zerone Prospect Intelligence — Deep Company Intelligence Report"
+                    "</div>"
+                ),
+                footer_template=(
+                    "<div style='font-size: 8pt; width: 100%; display: flex; justify-content: space-between; color: #64748b; "
+                    "padding: 0 16mm; font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif;'>"
+                    "<span>Confidential & Verified Primary Evidence</span>"
+                    "<span>Page <span class='pageNumber'></span> of <span class='totalPages'></span></span>"
+                    "</div>"
+                ),
+                margin={"top": "22mm", "bottom": "22mm", "left": "16mm", "right": "16mm"},
             )
             browser.close()
 

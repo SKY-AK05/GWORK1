@@ -25,29 +25,106 @@ def normalize_name(value: str) -> str:
 
 
 def match_company_identity(target_name: str, candidate: dict[str, Any], jurisdiction: Optional[str] = None) -> dict[str, Any]:
-    """Score a candidate without merging it into the target automatically."""
+    """Score a candidate without merging it into the target on name similarity alone."""
     target = normalize_name(target_name)
     candidate_name = normalize_name(str(candidate.get("name", "")))
     exact = bool(target and candidate_name and target == candidate_name)
     token_overlap = bool(target and candidate_name and (target in candidate_name or candidate_name in target))
-    jurisdiction_match = bool(jurisdiction and str(candidate.get("jurisdiction", "")).lower() in jurisdiction.lower())
-    if exact and (jurisdiction_match or not jurisdiction):
+    
+    cand_jurisdiction = str(candidate.get("jurisdiction", "")).strip()
+    cand_id = candidate.get("company_number") or candidate.get("id") or candidate.get("registration_number")
+    cand_domain = candidate.get("domain") or candidate.get("website")
+
+    jurisdiction_match = bool(jurisdiction and cand_jurisdiction and cand_jurisdiction.lower() in jurisdiction.lower())
+    jurisdiction_conflict = bool(jurisdiction and cand_jurisdiction and cand_jurisdiction.lower() not in jurisdiction.lower() and jurisdiction.lower() not in cand_jurisdiction.lower())
+
+    if jurisdiction_conflict:
+        status, confidence = "rejected", "high"
+        rationale = f"Contradictory jurisdiction: target expects '{jurisdiction}', candidate registered in '{cand_jurisdiction}'."
+    elif cand_id and exact and (jurisdiction_match or not jurisdiction):
+        # Official legal identifier corroboration in matching jurisdiction
         status, confidence = "confirmed_match", "high"
-    elif token_overlap or exact:
+        rationale = f"Exact name match corroborated by official registry identifier ({cand_id}) in {cand_jurisdiction or jurisdiction}."
+    elif cand_domain and exact:
+        status, confidence = "confirmed_match", "high"
+        rationale = f"Exact name match verified with company-controlled domain ({cand_domain})."
+    elif exact and (jurisdiction_match or not jurisdiction):
+        # Exact name but no verified legal identifier or domain yet: keep as possible match, unmerged!
         status, confidence = "possible_match", "medium"
+        rationale = f"Name match in {cand_jurisdiction or jurisdiction}, but lacks independent legal identifier or domain corroboration; unmerged."
+    elif token_overlap:
+        status, confidence = "possible_match", "low"
+        rationale = "Token overlap observed; similarity alone is insufficient to verify identity."
     else:
         status, confidence = "rejected", "high"
+        rationale = "No name similarity or conflicting entity attributes."
+
     return {
         "target_name": target_name,
         "candidate_name": candidate.get("name", ""),
-        "candidate_id": candidate.get("company_number") or candidate.get("id"),
-        "jurisdiction": candidate.get("jurisdiction") or jurisdiction,
+        "candidate_id": cand_id,
+        "jurisdiction": cand_jurisdiction or jurisdiction,
         "match_status": status,
         "confidence": confidence,
+        "match_rationale": rationale,
         "source_url": candidate.get("source_url"),
         "evidence": candidate.get("evidence", []),
         "retrieved_at": candidate.get("retrieved_at") or _now(),
         "verification_status": "verified" if status == "confirmed_match" else "unverified",
+    }
+
+
+def resolve_candidate_identities(
+    candidates: list[dict[str, Any]],
+    target_name: str,
+    jurisdiction: Optional[str] = None,
+) -> dict[str, Any]:
+    """Conservative entity resolution comparing legal identifiers, jurisdiction, address, and domain.
+
+    Never merges on name similarity alone. Partitions candidates into:
+    - confirmed: matching legal identifier or verified domain in matching jurisdiction
+    - related: linked parent, subsidiary, brand, branch, or acquisition
+    - unrelated: distinct registration number, conflicting jurisdiction, or separate business
+    - unverified: name similarity without independent corroborating evidence
+    """
+    confirmed = []
+    related = []
+    unrelated = []
+    unverified = []
+
+    seen_ids = set()
+    for cand in candidates:
+        scored = match_company_identity(target_name, cand, jurisdiction)
+        status = scored.get("match_status")
+        cand_id = scored.get("candidate_id")
+
+        # Deduplicate candidates with identical id
+        dedup_key = (str(cand_id), str(scored.get("candidate_name", "")).lower())
+        if cand_id and dedup_key in seen_ids:
+            continue
+        if cand_id:
+            seen_ids.add(dedup_key)
+
+        is_related = cand.get("relationship_type") in ("parent", "subsidiary", "brand", "branch", "acquisition")
+        if is_related:
+            related.append(scored)
+        elif status == "confirmed_match":
+            confirmed.append(scored)
+        elif status == "rejected":
+            unrelated.append(scored)
+        else:
+            unverified.append(scored)
+
+    return {
+        "confirmed": confirmed,
+        "related": related,
+        "unrelated": unrelated,
+        "unverified": unverified,
+        "total_evaluated": len(candidates),
+        "resolution_summary": (
+            f"Evaluated {len(candidates)} candidate(s): {len(confirmed)} confirmed, "
+            f"{len(related)} related, {len(unverified)} unverified similarity, {len(unrelated)} unrelated."
+        ),
     }
 
 
@@ -134,33 +211,97 @@ def _page_matches_target(page: dict[str, Any], target_name: Optional[str]) -> bo
     return normalize_name(target_name) in normalize_name(haystack)
 
 
+_CONTACT_AGGREGATOR_DOMAINS = {
+    "tracxn.com", "thecompanycheck.com", "zaubacorp.com", "tofler.in",
+    "linkedin.com", "google.com", "whatsapp.com", "wa.me", "twitter.com", "x.com",
+    "facebook.com", "instagram.com", "youtube.com", "sentry.io", "wixpress.com",
+    "cloudflare.com", "example.com", "domain.com", "github.com", "wikipedia.org",
+}
+
+_INVALID_EMAIL_PREFIXES = (
+    "privacy@", "legal@", "abuse@", "postmaster@", "security@", "noreply@", "no-reply@",
+    "mailer-daemon@", "hostmaster@", "webmaster@", "support@tracxn.com", "contact@zaubacorp.com"
+)
+
+
 def extract_business_contacts(pages: list[dict[str, Any]], target_name: Optional[str] = None) -> list[dict[str, Any]]:
-    """Extract only explicitly published business contact channels."""
+    """Extract legitimate published business contact channels; reject aggregators and generic privacy emails."""
     results: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
     email_re = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I)
     phone_re = re.compile(r"(?<!\w)(?:\+\d[\d ()().-]{7,}\d|\(?\d{3,4}\)?[ -]\d{3,4}[ -]\d{3,4})(?!\w)")
+
     for page in pages:
         if not _page_matches_target(page, target_name):
             continue
         url, content, retrieved = page.get("url", ""), page.get("content", ""), page.get("retrieved_at")
+        page_netloc = urlparse(url).netloc.lower()
+
         for kind, pattern in (("email", email_re), ("phone", phone_re)):
             haystack = content if kind == "email" else "\n".join(
                 line for line in content.splitlines() if re.search(r"(?i)phone|tel|call|whatsapp|contact", line)
             )
             for match in pattern.findall(haystack):
                 value = " ".join(match.split())
-                key = (kind, value.lower())
+                val_lower = value.lower()
+
+                # Filter email validity & aggregators
+                if kind == "email":
+                    email_domain = val_lower.split("@")[-1] if "@" in val_lower else ""
+                    if email_domain in _CONTACT_AGGREGATOR_DOMAINS:
+                        continue
+                    if any(val_lower.startswith(prefix) for prefix in _INVALID_EMAIL_PREFIXES):
+                        continue
+                    local_part = val_lower.split("@")[0] if "@" in val_lower else ""
+                    if any(noise in local_part for noise in ("someone", "username", "john.doe")) or val_lower.endswith((".png", ".jpg", ".jpeg", ".gif")):
+                        continue
+
+                # Filter phone validity
+                if kind == "phone":
+                    digits = re.sub(r"\D", "", value)
+                    if len(digits) < 8 or len(digits) > 15:
+                        continue
+                    # Ignore dates formatted like 2024-01-01 or all same digits
+                    if len(set(digits)) <= 2:
+                        continue
+
+                key = (kind, val_lower)
                 if key in seen:
                     continue
                 seen.add(key)
-                results.append(_record(url, f"Published on fetched page: {value}", retrieved, contact_type=kind, value=value, verification_status="published_unverified", confidence="medium"))
+                results.append(_record(
+                    url,
+                    f"Published on fetched page: {value}",
+                    retrieved,
+                    contact_type=kind,
+                    channel_type=kind,
+                    value=value,
+                    publisher=page_netloc,
+                    verification_status="published_unverified",
+                    confidence="medium",
+                ))
+
         for link in re.findall(r"https?://[^\s<>\]\)\"']+", content):
-            if any(token in link.lower() for token in ("/contact", "contact-us", "/book", "calendly", "wa.me", "whatsapp.com")):
-                key = ("channel", link.rstrip(".,;:!?").lower())
+            link_clean = link.rstrip(".,;:!?")
+            link_lower = link_clean.lower()
+            if any(token in link_lower for token in ("/contact", "contact-us", "/book", "calendly")):
+                link_netloc = urlparse(link_clean).netloc.lower()
+                if link_netloc in _CONTACT_AGGREGATOR_DOMAINS and "calendly" not in link_lower:
+                    continue
+                key = ("channel", link_lower)
                 if key not in seen:
                     seen.add(key)
-                    results.append(_record(url, f"Published contact channel link: {link}", retrieved, contact_type="channel", value=link.rstrip(".,;:!?"), verification_status="published_unverified", confidence="medium"))
+                    results.append(_record(
+                        url,
+                        f"Published contact channel link: {link_clean}",
+                        retrieved,
+                        contact_type="channel",
+                        channel_type="channel",
+                        value=link_clean,
+                        publisher=page_netloc,
+                        verification_status="published_unverified",
+                        confidence="medium",
+                    ))
     return results
 
 

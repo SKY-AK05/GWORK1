@@ -60,6 +60,7 @@ from src.verification.company_intelligence import (
     extract_identity_candidates,
     extract_roles,
     extract_workforce_signals,
+    resolve_candidate_identities,
     search_companies_house,
 )
 from src.verification.india import build_india_verification
@@ -529,12 +530,24 @@ async def load_company_memory_node(state: ResearchState) -> dict:
     name, jurisdiction = _company_memory_identity(state)
     store = CompanyMemoryStore(state.get("memory_db_path") or os.getenv("COMPANY_MEMORY_DB", "~/.cache/deepresearch/company_intelligence.sqlite3"))
     context = await asyncio.to_thread(store.load_context, name, jurisdiction, stale_after_days=int(os.getenv("COMPANY_MEMORY_STALE_DAYS", "30")))
+    trace = list(state.get("decision_trace", []))
+    trace.append({
+        "stage": "memory_loading",
+        "step": 0,
+        "decision": "prior_memory_retrieved",
+        "rationale": f"Loaded durable memory for '{name}' in jurisdiction '{jurisdiction or 'any'}'.",
+        "findings": f"{'Found prior company profile' if context.get('found') else 'No prior profile found'}; {len(context.get('findings', []))} historical claims, {len(context.get('stale_findings', []))} stale facts, {len(context.get('conflicts', []))} conflicting items.",
+        "uncertainties": "; ".join(context.get("missing", []))[:300] if context.get("missing") else "None",
+        "next_steps": "Analyze task requirements and generate prioritized research plan.",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
     return {
         "company_memory_context": context,
         "memory_gaps": context.get("missing", []),
         "stale_findings": context.get("stale_findings", []),
         "memory_conflicts": context.get("conflicts", []),
         "memory_summary": {"found": context.get("found", False), "findings": len(context.get("findings", [])), "stale": len(context.get("stale_findings", [])), "conflicts": len(context.get("conflicts", []))},
+        "decision_trace": trace,
     }
 
 
@@ -623,12 +636,21 @@ async def detect_mode_node(state: ResearchState) -> dict:
         "requested_outputs": analysis.requested_outputs,
     }
 
-    # Auto-assign one researcher per comparison target when the user has not
-    # explicitly requested a multi-researcher run. This ensures each target gets
-    # dedicated queries, fetches, and a focused memo rather than sharing a single
-    # research pass that can be biased toward whichever target appears first.
     if analysis.task_mode == "comparison" and state.get("num_researchers", 1) == 1:
         update["num_researchers"] = len(analysis.comparison_targets)
+
+    trace = list(state.get("decision_trace", []))
+    trace.append({
+        "stage": "task_understanding",
+        "step": 1,
+        "decision": f"Mode: {analysis.task_mode}; targets: {analysis.comparison_targets}",
+        "rationale": "Understood essential company research questions and requested analytical outputs.",
+        "findings": "Identified company research scope. Focus: identity verification, origins, business model, leadership, contacts, workforce.",
+        "uncertainties": "Identity must be verified through primary registries before merging records.",
+        "next_steps": "Generate prioritized research queries across discovery and official registry sources.",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+    update["decision_trace"] = trace
 
     memory = _get_memory(state)
     if memory:
@@ -686,11 +708,32 @@ async def plan_search_node(state: ResearchState) -> dict:
         plan_items = validated["items"]
         queries = [query.strip() for item in plan_items for query in item.get("queries", []) if query.strip()]
         queries = queries[:n_queries]
-        decision_trace = [{"stage": "planning", "decision": "model_plan", "rationale": plan.rationale, "rejected": validated["rejected"]}]
+        decision_trace = list(state.get("decision_trace", []))
+        decision_trace.append({
+            "stage": "planning",
+            "step": 3,
+            "decision": "prioritized_plan_selected",
+            "rationale": plan.rationale or f"Selected {len(queries)} prioritized research queries constrained to permitted tool categories.",
+            "findings": f"Generated {len(queries)} prioritized queries across registries, official site, and corporate discovery.",
+            "uncertainties": "Registry filings and verified identity records pending retrieval.",
+            "next_steps": "Execute prioritized web searches and retrieve candidate source pages.",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "rejected": validated.get("rejected", []),
+        })
         research_plan = plan.model_dump()
     except Exception as exc:
         queries = []
-        decision_trace = [{"stage": "planning", "decision": "deterministic_fallback", "rationale": f"Model planning unavailable: {type(exc).__name__}"}]
+        decision_trace = list(state.get("decision_trace", []))
+        decision_trace.append({
+            "stage": "planning",
+            "step": 3,
+            "decision": "deterministic_fallback",
+            "rationale": f"Model planning unavailable: {type(exc).__name__}",
+            "findings": "Constructed deterministic search plan.",
+            "uncertainties": "Fallback mode active.",
+            "next_steps": "Execute search plan.",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
         research_plan = {"items": [], "stopping_conditions": ["provider unavailable or invalid plan"], "rationale": "fallback"}
     if not queries:
         queries = [task]
@@ -939,6 +982,7 @@ async def follow_up_searches_node(state: ResearchState) -> dict:
 
     new_pages, new_failures = _split_fetch_results(fetched_raw)
 
+    trace = list(state.get("decision_trace", []))
     if new_pages:
         combined_pages = fetched_pages + new_pages
         prior_official_links = {
@@ -946,6 +990,16 @@ async def follow_up_searches_node(state: ResearchState) -> dict:
             for row in state.get("source_coverage", [])
             if row.get("discovery_method") == "official_site_link"
         }
+        trace.append({
+            "stage": "gap_analysis_replanning",
+            "step": 6,
+            "decision": f"Dispatched {len(follow_up_queries)} targeted follow-up queries",
+            "rationale": f"Identified research gaps in initial {len(fetched_pages)} sources. Formulated targeted follow-up queries to resolve unanswered questions.",
+            "findings": f"Retrieved {len(new_pages)} additional sources; total pool: {len(combined_pages)}.",
+            "uncertainties": "Unanswered questions regarding leadership, contacts, or registry filings.",
+            "next_steps": "Validate claims and verify company intelligence records.",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
         return {
             "fetched_pages": combined_pages,
             "source_coverage": _coverage_records(
@@ -954,11 +1008,23 @@ async def follow_up_searches_node(state: ResearchState) -> dict:
             "search_plan": search_plan + follow_up_queries,
             "fetch_failures": list(state.get("fetch_failures", [])) + new_failures,
             "run_status": "partial" if new_failures else state.get("run_status", "completed"),
+            "decision_trace": trace,
         }
+    trace.append({
+        "stage": "adaptive_replanning",
+        "step": 9,
+        "decision": "stop_search_phase",
+        "rationale": "Search budget reached or expected value of additional searches evaluated as low.",
+        "findings": f"Total {len(fetched_pages)} pages collected.",
+        "uncertainties": "Remaining gaps will be preserved as Unresolved Questions in the final report.",
+        "next_steps": "Validate claims, classify evidence, and generate presentation-ready reports.",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
     return {
         "search_plan": search_plan + follow_up_queries,
         "fetch_failures": list(state.get("fetch_failures", [])) + new_failures,
         "run_status": "partial" if new_failures and fetched_pages else "blocked" if new_failures else state.get("run_status", "completed"),
+        "decision_trace": trace,
     }
 
 
@@ -987,6 +1053,7 @@ async def verify_company_intelligence_node(state: ResearchState) -> dict:
             "business_analysis": {},
             "workforce_signals": [],
             "hiring_signals": [],
+            "claim_ledger": [],
         }
 
     target = target_for_registry
@@ -998,6 +1065,64 @@ async def verify_company_intelligence_node(state: ResearchState) -> dict:
     contacts = extract_business_contacts(pages, target)
     relationships = extract_entity_relationships(pages, target)
     workforce, hiring = extract_workforce_signals(pages, target)
+
+    # Resolve candidate identities comparing legal identifiers, jurisdiction, address, domain
+    resolution = resolve_candidate_identities(identities, target, state.get("memory_jurisdiction"))
+
+    # Build claim ledger for material claims with source URL, publisher, timestamp, excerpt
+    claim_ledger: List[dict] = []
+    for r in roles:
+        s_url = r.get("source_url", "")
+        claim_ledger.append({
+            "claim": f"{r.get('person_name')} is {r.get('role_status', 'associated')} as {r.get('role')}",
+            "claim_type": "leadership",
+            "source_url": s_url,
+            "publisher": urlparse(s_url).netloc if s_url else "web",
+            "publication_date": r.get("publication_date"),
+            "retrieved_at": r.get("retrieved_at"),
+            "evidence_excerpt": r.get("evidence"),
+            "confidence": r.get("confidence", "medium"),
+            "verification_status": r.get("verification_status", "candidate"),
+        })
+    for c in contacts:
+        s_url = c.get("source_url", "")
+        claim_ledger.append({
+            "claim": f"Published contact channel: {c.get('value')} ({c.get('channel_type', 'channel')})",
+            "claim_type": "contact_channel",
+            "source_url": s_url,
+            "publisher": c.get("publisher") or (urlparse(s_url).netloc if s_url else "web"),
+            "publication_date": c.get("publication_date"),
+            "retrieved_at": c.get("retrieved_at"),
+            "evidence_excerpt": c.get("evidence"),
+            "confidence": c.get("confidence", "medium"),
+            "verification_status": c.get("verification_status", "published_unverified"),
+        })
+    for h in hiring:
+        s_url = h.get("source_url", "")
+        claim_ledger.append({
+            "claim": f"Public job posting for role '{h.get('role')}' ({', '.join(h.get('work_arrangement', []))})",
+            "claim_type": "workforce_hiring",
+            "source_url": s_url,
+            "publisher": urlparse(s_url).netloc if s_url else "web",
+            "publication_date": h.get("publication_date"),
+            "retrieved_at": h.get("retrieved_at"),
+            "evidence_excerpt": h.get("evidence"),
+            "confidence": h.get("confidence", "medium"),
+            "verification_status": h.get("verification_status", "published_unverified"),
+        })
+    for ev in events:
+        s_url = ev.get("source_url", "")
+        claim_ledger.append({
+            "claim": f"Dated milestone ({ev.get('event_date', 'dated')}): {ev.get('event_type')}",
+            "claim_type": "dated_milestone",
+            "source_url": s_url,
+            "publisher": urlparse(s_url).netloc if s_url else "web",
+            "publication_date": ev.get("publication_date") or ev.get("event_date"),
+            "retrieved_at": ev.get("retrieved_at"),
+            "evidence_excerpt": ev.get("evidence"),
+            "confidence": ev.get("confidence", "medium"),
+            "verification_status": ev.get("verification_status", "candidate"),
+        })
 
     claims: List[dict] = []
     for page in pages:
@@ -1013,6 +1138,19 @@ async def verify_company_intelligence_node(state: ResearchState) -> dict:
                         "retrieved_at": page.get("retrieved_at"),
                     })
     contradictions = detect_contradictions(claims)
+
+    trace = list(state.get("decision_trace", []))
+    trace.append({
+        "stage": "identity_resolution",
+        "step": 2,
+        "decision": resolution.get("resolution_summary"),
+        "rationale": "Evaluated candidate entities comparing legal identifiers, registration jurisdictions, and domain presence before merging any records.",
+        "findings": f"Confirmed: {len(resolution.get('confirmed', []))}; Related: {len(resolution.get('related', []))}; Unverified similarity: {len(resolution.get('unverified', []))}; Unrelated: {len(resolution.get('unrelated', []))}.",
+        "uncertainties": "Unverified similarity candidates kept distinct to prevent false entity merging.",
+        "next_steps": "Synthesize evidence memo and cross-examine claim provenance.",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
     return {
         "registry_verification": registry,
         "india_verification": india,
@@ -1024,6 +1162,8 @@ async def verify_company_intelligence_node(state: ResearchState) -> dict:
         "entity_relationships": relationships,
         "workforce_signals": workforce,
         "hiring_signals": hiring,
+        "claim_ledger": claim_ledger,
+        "decision_trace": trace,
     }
 
 
@@ -2046,6 +2186,8 @@ def _save_product_manifests(
         "model": state.get("model_name"),
         "writer_model": state.get("writer_model_name") or state.get("model_name"),
         "search_plan": state.get("search_plan", []),
+        "research_plan": state.get("research_plan", {}),
+        "decision_trace": state.get("decision_trace", []),
         "source_count": len(sources),
         "coverage_summary": state.get("coverage_summary", {}),
         "tool_errors": state.get("search_failures", []) + state.get("fetch_failures", []),

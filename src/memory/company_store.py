@@ -210,11 +210,40 @@ class CompanyMemoryStore:
         with self._connect() as conn:
             profile = conn.execute("SELECT * FROM profiles WHERE canonical_key=?", (key,)).fetchone()
             if not profile:
-                return {"found": False, "profile": None, "findings": [], "stale_findings": [], "conflicts": [], "missing": ["No prior durable company profile exists."], "schema_version": SCHEMA_VERSION}
+                return {
+                    "found": False,
+                    "profile": None,
+                    "findings": [],
+                    "entities": [],
+                    "people": [],
+                    "relationships": [],
+                    "products": [],
+                    "customers": [],
+                    "dated_events": [],
+                    "role_changes": [],
+                    "stale_findings": [],
+                    "conflicts": [],
+                    "missing": ["No prior durable company profile exists."],
+                    "schema_version": SCHEMA_VERSION,
+                }
             pid = profile["id"]
-            rows = conn.execute("SELECT c.*, s.url AS source_url, s.title, s.retrieved_at FROM claims c JOIN sources s ON s.id=c.source_id WHERE c.profile_id=? ORDER BY c.observed_at DESC LIMIT 250", (pid,)).fetchall()
+            rows = conn.execute(
+                "SELECT c.*, s.url AS source_url, s.title, s.retrieved_at FROM claims c "
+                "JOIN sources s ON s.id=c.source_id WHERE c.profile_id=? "
+                "ORDER BY c.observed_at DESC LIMIT 250",
+                (pid,),
+            ).fetchall()
             findings = [dict(row) for row in rows]
             stale = [row for row in findings if (row.get("retrieved_at") or "") < cutoff]
+
+            entities = [dict(r) for r in conn.execute("SELECT * FROM entities WHERE profile_id=? ORDER BY observed_at DESC LIMIT 50", (pid,)).fetchall()]
+            people = [dict(r) for r in conn.execute("SELECT * FROM people WHERE profile_id=? ORDER BY observed_at DESC LIMIT 50", (pid,)).fetchall()]
+            relationships = [dict(r) for r in conn.execute("SELECT * FROM relationships WHERE profile_id=? ORDER BY observed_at DESC LIMIT 50", (pid,)).fetchall()]
+            products = [dict(r) for r in conn.execute("SELECT * FROM products WHERE profile_id=? ORDER BY observed_at DESC LIMIT 50", (pid,)).fetchall()]
+            customers = [dict(r) for r in conn.execute("SELECT * FROM customers WHERE profile_id=? ORDER BY observed_at DESC LIMIT 50", (pid,)).fetchall()]
+            events = [dict(r) for r in conn.execute("SELECT * FROM dated_events WHERE profile_id=? ORDER BY observed_at DESC LIMIT 50", (pid,)).fetchall()]
+            role_changes = [dict(r) for r in conn.execute("SELECT * FROM role_changes WHERE profile_id=? ORDER BY observed_at DESC LIMIT 50", (pid,)).fetchall()]
+
             conflicts: list[dict[str, Any]] = []
             grouped: dict[tuple[str, str], set[str]] = {}
             for row in findings:
@@ -229,8 +258,70 @@ class CompanyMemoryStore:
                 missing.append(f"{len(stale)} stored findings are older than {stale_after_days} days.")
             if conflicts:
                 missing.append(f"{len(conflicts)} claim groups contain conflicting values.")
-            return {"found": True, "profile": dict(profile), "findings": findings, "stale_findings": stale, "conflicts": conflicts, "missing": missing, "schema_version": SCHEMA_VERSION}
+            return {
+                "found": True,
+                "profile": dict(profile),
+                "findings": findings,
+                "entities": entities,
+                "people": people,
+                "relationships": relationships,
+                "products": products,
+                "customers": customers,
+                "dated_events": events,
+                "role_changes": role_changes,
+                "stale_findings": stale,
+                "conflicts": conflicts,
+                "missing": missing,
+                "schema_version": SCHEMA_VERSION,
+            }
+
+    def detect_diff(self, company_name: str, jurisdiction: str | None, current_findings: dict[str, Any]) -> dict[str, Any]:
+        """Detect meaningful changes between stored history and current run findings."""
+        context = self.load_context(company_name, jurisdiction)
+        if not context["found"]:
+            return {"has_prior_history": False, "changes": []}
+
+        prior_people = {p["name"].lower() for p in context.get("people", []) if p.get("name")}
+        curr_people = {
+            (r.get("person_name") or r.get("name", "")).lower()
+            for r in (current_findings.get("role_records") or current_findings.get("roles") or [])
+            if (r.get("person_name") or r.get("name"))
+        }
+
+        prior_products = {p["name"].lower() for p in context.get("products", []) if p.get("name")}
+        curr_products = {
+            str(item).lower()
+            for item in (current_findings.get("products") or [])
+        }
+
+        changes = []
+        new_people = curr_people - prior_people
+        if new_people and prior_people:
+            changes.append({"type": "new_leadership_or_personnel", "items": sorted(list(new_people))})
+
+        departures = prior_people - curr_people
+        if departures and prior_people:
+            changes.append({"type": "unmentioned_prior_personnel", "items": sorted(list(departures))})
+
+        new_prods = curr_products - prior_products
+        if new_prods and prior_products:
+            changes.append({"type": "new_products_or_services", "items": sorted(list(new_prods))})
+
+        return {
+            "has_prior_history": True,
+            "profile_updated_at": context["profile"].get("updated_at") if context.get("profile") else None,
+            "changes_detected": len(changes) > 0,
+            "changes": changes,
+        }
 
     def summary(self, company_name: str, jurisdiction: str | None) -> dict[str, Any]:
         context = self.load_context(company_name, jurisdiction)
-        return {"found": context["found"], "findings": len(context.get("findings", [])), "stale": len(context.get("stale_findings", [])), "conflicts": len(context.get("conflicts", [])), "db_path": str(self.db_path)}
+        return {
+            "found": context["found"],
+            "findings": len(context.get("findings", [])),
+            "stale": len(context.get("stale_findings", [])),
+            "conflicts": len(context.get("conflicts", [])),
+            "entities": len(context.get("entities", [])),
+            "people": len(context.get("people", [])),
+            "db_path": str(self.db_path),
+        }
