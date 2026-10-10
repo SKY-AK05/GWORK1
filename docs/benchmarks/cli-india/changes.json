@@ -1,0 +1,32 @@
+{
+  "is_first_snapshot": true,
+  "changed_fields": [],
+  "newly_observed_fields": [
+    "architecture_diagram_mermaid",
+    "business_contacts",
+    "comparison_table_markdown",
+    "comparison_targets",
+    "confidence_summary",
+    "contradictions",
+    "dated_events",
+    "executive_summary",
+    "fetch_failures",
+    "identity_candidates",
+    "india_verification",
+    "input",
+    "methodology_notes",
+    "open_questions",
+    "question",
+    "recommendations",
+    "registry_verification",
+    "requested_outputs",
+    "role_records",
+    "run_id",
+    "run_status",
+    "schema_version",
+    "search_failures",
+    "sections",
+    "sources",
+    "task_mode"
+  ]
+}
