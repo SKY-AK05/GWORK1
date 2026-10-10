@@ -663,6 +663,7 @@ async def plan_search_node(state: ResearchState) -> dict:
                         "First generate candidate entities and compare whether they are the same, related, or unrelated. "
                         "Cover legal entities, brands, subsidiaries, branches, aliases, locations, registration details, and websites. "
                         "Also plan targeted evidence for purpose, mission, business model, products, services, operations, customers, beneficiaries, partnerships, competitors, industry, founders, leadership, employees, hiring, joiners, departures, position changes, and public job postings. "
+                        "When relevant, search public LinkedIn, Instagram, X/Twitter, Facebook, YouTube, and other platform pages for official accounts, hiring, leadership announcements, partnerships, products, customer references, hashtags, and recent developments; verify account ownership from company-controlled links or consistent identifiers where possible, and label unverified accounts as leads. "
                         "Use adaptive follow-up questions to fill the highest-value gaps and seek counter-evidence. "
                         "Prioritize official registries, company-controlled pages, filings, and reliable reporting. "
                         "Use only these tool categories: "
