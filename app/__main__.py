@@ -13,6 +13,10 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 def _slug(value: str) -> str:
     value = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
@@ -93,7 +97,7 @@ async def _run(args: argparse.Namespace) -> int:
     print(f"Artifact validation: {'passed' if validation['valid'] else 'failed'}")
     for error in validation["errors"]:
         print(f"Validation error : {error}", file=sys.stderr)
-    for name in ("company_research_report.md", "company_research.json", "sources.json", "run_metadata.json", "prospect.json"):
+    for name in ("company_research_report.md", "company_research_report.pdf", "company_research.json", "sources.json", "run_metadata.json", "prospect.json"):
         path = workdir / name
         if path.exists():
             print(f"Output           : {path}")

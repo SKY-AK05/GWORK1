@@ -79,7 +79,8 @@ async def search_companies_house(name: str, api_key: Optional[str] = None, clien
     No key means no network call and an honest inconclusive outcome. The API key is
     read from the environment by default and is never included in returned records.
     """
-    api_key = api_key or os.getenv("COMPANIES_HOUSE_API_KEY")
+    if api_key is None:
+        api_key = os.getenv("COMPANIES_HOUSE_API_KEY")
     if not api_key:
         return classify_registry_outcome(attempted=False, records=[], error="COMPANIES_HOUSE_API_KEY is not configured")
     close_client = False

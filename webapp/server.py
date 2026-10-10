@@ -25,6 +25,9 @@ JOB_ROOT.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_ARTIFACTS = {
     "company_research_report.md": "text/markdown",
+    "company_research_report.pdf": "application/pdf",
+    "final_report.pdf": "application/pdf",
+    "final_report.md": "text/markdown",
     "company_research.json": "application/json",
     "sources.json": "application/json",
     "run_metadata.json": "application/json",

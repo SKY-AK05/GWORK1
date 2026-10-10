@@ -1950,7 +1950,7 @@ def _build_prospect_record(
 
 async def save_artifacts_node(state: ResearchState) -> dict:
     """Write Markdown, JSON, PDF, and machine-readable run manifest artifacts."""
-    from src.exporters import mermaid_to_png, report_to_pdf
+    from src.exporters import mermaid_to_png, generate_final_reports
 
     workdir = state["workdir"]
     os.makedirs(workdir, exist_ok=True)
@@ -1977,40 +1977,34 @@ async def save_artifacts_node(state: ResearchState) -> dict:
     report_data = state.get("report")
     if report_data:
         report = WriterReport.model_validate(report_data)
-        report_md_path = _save_report(report, workdir)
-        result["report_path"] = report_md_path
         memo_for_record = ResearchMemo.model_validate(memo_data) if memo_data else None
+
+        # Automatically generate clean, decision-ready Markdown and PDF reports
+        report_files = generate_final_reports(report, workdir, state=state, memo_data=memo_for_record)
+        result["report_path"] = report_files["markdown_path"]
+        result["company_report_path"] = report_files["markdown_path"]
+        if report_files.get("pdf_path"):
+            result["report_pdf_path"] = report_files["pdf_path"]
+            result["company_pdf_path"] = report_files["pdf_path"]
+
         prospect = _build_prospect_record(state, report, memo_for_record)
         prospect_path = os.path.join(workdir, "prospect.json")
         with open(prospect_path, "w", encoding="utf-8") as handle:
             handle.write(prospect.model_dump_json(indent=2))
         result["prospect_json_path"] = prospect_path
-        result.update(_save_product_manifests(state, report, memo_for_record, workdir))
 
-        # Diagram PNG export first (PDF may embed it)
-        diagram_path: Optional[str] = None
+        manifest_paths = _save_product_manifests(state, report, memo_for_record, workdir, report_files=report_files)
+        result.update(manifest_paths)
+
+        # Diagram PNG export (if requested)
         mermaid_code = report_data.get("architecture_diagram_mermaid")
         if mermaid_code and mermaid_code.strip():
             png_path = os.path.join(workdir, "architecture_diagram.png")
             success = await mermaid_to_png(mermaid_code.strip(), png_path)
             if success:
-                diagram_path = png_path
                 result["diagram_path"] = png_path
             else:
                 print("[exporters] Mermaid PNG fetch failed (non-fatal).", flush=True)
-
-        # PDF export from structured report data via xelatex
-        try:
-            pdf_path = os.path.join(workdir, "final_report.pdf")
-            report_to_pdf(
-                report_data,
-                pdf_path,
-                diagram_path=diagram_path,
-                depth=state.get("depth", "standard"),
-            )
-            result["report_pdf_path"] = pdf_path
-        except Exception as exc:
-            print(f"[exporters] PDF generation failed (non-fatal): {exc}", flush=True)
 
     return result
 
@@ -2020,6 +2014,7 @@ def _save_product_manifests(
     report: WriterReport,
     memo: Optional[ResearchMemo],
     workdir: str,
+    report_files: Optional[dict] = None,
 ) -> dict:
     """Save stable product-facing names without changing the legacy artifacts."""
     report_payload = report.model_dump()
@@ -2035,6 +2030,12 @@ def _save_product_manifests(
     sources_json = os.path.join(workdir, "sources.json")
     with open(sources_json, "w", encoding="utf-8") as handle:
         json.dump({"schema_version": "1.0", "sources": sources}, handle, ensure_ascii=False, indent=2)
+
+    pdf_path = (report_files.get("pdf_path") if report_files else None) or (
+        os.path.join(workdir, "company_research_report.pdf")
+        if os.path.exists(os.path.join(workdir, "company_research_report.pdf"))
+        else None
+    )
 
     metadata = {
         "schema_version": "1.0",
@@ -2058,29 +2059,36 @@ def _save_product_manifests(
         "model_usage": list(MODEL_CALL_LOG),
         "report_paths": {
             "markdown": os.path.join(workdir, "company_research_report.md"),
+            "pdf": pdf_path,
             "json": report_json,
             "sources": sources_json,
         },
+        "pdf_generation_status": "success" if (report_files and report_files.get("pdf_success")) or pdf_path else "failed",
+        "pdf_generation_error": report_files.get("pdf_error") if report_files else None,
     }
     metadata_json = os.path.join(workdir, "run_metadata.json")
     with open(metadata_json, "w", encoding="utf-8") as handle:
         json.dump(metadata, handle, ensure_ascii=False, indent=2)
 
-    report_md_path = os.path.join(workdir, "final_report.md")
-    if not os.path.exists(report_md_path):
-        _save_report(report, workdir)
     report_markdown = os.path.join(workdir, "company_research_report.md")
-    with open(report_md_path, "r", encoding="utf-8") as source:
-        markdown = source.read()
-    with open(report_markdown, "w", encoding="utf-8") as target:
-        target.write(markdown)
-    return {
+    if not os.path.exists(report_markdown):
+        report_md_path = os.path.join(workdir, "final_report.md")
+        if not os.path.exists(report_md_path):
+            _save_report(report, workdir)
+        with open(report_md_path, "r", encoding="utf-8") as source:
+            markdown = source.read()
+        with open(report_markdown, "w", encoding="utf-8") as target:
+            target.write(markdown)
+    res = {
         "company_report_path": report_markdown,
         "company_json_path": report_json,
         "sources_json_path": sources_json,
         "run_metadata_path": metadata_json,
         **snapshot_paths,
     }
+    if pdf_path:
+        res["company_pdf_path"] = pdf_path
+    return res
 
 
 def _save_snapshot(prospect: dict, workdir: str) -> dict:
@@ -2211,133 +2219,9 @@ def _save_memo(
 
 
 def _save_report(report: WriterReport, workdir: str) -> str:
-    lines = [
-        "# Final Report", "",
-        "## Question", "", report.question, "",
-        "## Executive Summary", "", report.executive_summary, "",
-    ]
-
-    if report.task_mode == "comparison" and report.comparison_targets:
-        lines += ["## Compared Targets", ""]
-        lines += [f"- {t}" for t in report.comparison_targets]
-        lines.append("")
-
-    if "comparison_table" in report.requested_outputs and report.comparison_table_markdown:
-        lines += ["## Comparison Table", "", report.comparison_table_markdown, ""]
-
-    if "architecture_diagram" in report.requested_outputs and report.architecture_diagram_mermaid:
-        lines += [
-            "## Architecture Diagram", "",
-            "```mermaid", report.architecture_diagram_mermaid.strip(), "```", "",
-        ]
-
-    # Thematic sections — the main body
-    for section in report.sections:
-        lines += [f"## {section.title}", "", section.narrative, ""]
-
-        if section.key_statistics:
-            lines += ["**Key Statistics**", ""]
-            lines += [f"- {s}" for s in section.key_statistics]
-            lines.append("")
-
-        if section.claims:
-            lines += [
-                "**Claims**", "",
-                "| # | Confidence | Source Agreement | Claim |",
-                "|---|---|---|---|",
-            ]
-            for i, claim in enumerate(section.claims, 1):
-                lines.append(
-                    f"| {i} | {claim.confidence} | {claim.source_agreement} | {claim.claim} |"
-                )
-            lines.append("")
-
-            for i, claim in enumerate(section.claims, 1):
-                lines += [
-                    f"### Claim {i}: {claim.claim[:80]}{'…' if len(claim.claim) > 80 else ''}",
-                    "",
-                    f"- **Confidence**: {claim.confidence}",
-                    f"- **Source Agreement**: {claim.source_agreement}",
-                    "",
-                    "**Supporting Evidence**", "",
-                ]
-                for bullet in claim.evidence:
-                    lines.append(f"- {bullet}")
-                lines.append("")
-
-    lines += ["## Verification and Company Intelligence", ""]
-    lines.append(f"- Registry outcome: {report.registry_verification.get('outcome', 'inconclusive_verification')}")
-    if report.registry_verification.get("error"):
-        lines.append(f"- Registry note: {report.registry_verification['error']}")
-    if report.india_verification:
-        lines.append("- India registry outcomes:")
-        for name, outcome in report.india_verification.get("registries", {}).items():
-            lines.append(f"  - {name}: {outcome.get('outcome', 'inconclusive_verification')}")
-    for label, records in (
-        ("Identity Candidates", report.identity_candidates),
-        ("Roles", report.role_records),
-        ("Dated Events", report.dated_events),
-        ("Contradictions", report.contradictions),
-        ("Public Business Contacts", report.business_contacts),
-        ("Entity Relationships", report.entity_relationships),
-        ("Workforce Signals", report.workforce_signals),
-        ("Hiring Signals", report.hiring_signals),
-        ("Claim Ledger", report.claim_ledger),
-    ):
-        if records:
-            lines += [f"### {label}", ""]
-            for record in records:
-                lines.append(f"- {json.dumps(record, ensure_ascii=False, sort_keys=True)}")
-    lines.append("")
-
-    if report.business_analysis:
-        lines += ["### Business Analysis", "", json.dumps(report.business_analysis, ensure_ascii=False, indent=2), ""]
-
-    lines += ["## Run Status and Failure Records", "", f"- Run status: {report.run_status}"]
-    for label, records in (("Search failures", report.search_failures), ("Fetch failures", report.fetch_failures)):
-        if records:
-            lines += [f"### {label}", ""]
-            lines.extend(f"- {json.dumps(record, ensure_ascii=False, sort_keys=True)}" for record in records)
-    lines.append("")
-
-    # Recommendations
-    lines += ["## Recommendations", ""]
-    if report.recommendations:
-        lines += [f"- {r}" for r in report.recommendations]
-    else:
-        lines.append("- No specific recommendations recorded.")
-    lines.append("")
-
-    # Methodology & confidence
-    lines += [
-        "## Methodology & Confidence", "",
-        "### Methodology", "", report.methodology_notes, "",
-        "### Overall Confidence", "", report.confidence_summary, "",
-    ]
-
-    # Open questions
-    lines += ["## Open Questions", ""]
-    lines += [f"- {item}" for item in report.open_questions] or ["- None identified."]
-    lines.append("")
-
-    # Sources — numbered list so [N] inline citations resolve visually
-    lines += ["## Sources", ""]
-    if report.sources:
-        for src in report.sources:
-            # Entries may already start with "[N]" (writer-produced) or be plain strings
-            lines.append(src if src.startswith("[") else f"- {src}")
-    else:
-        lines.append("- No sources recorded.")
-    lines += [
-        "",
-        "## Report Notes",
-        "",
-        "- Claims are separated from evidence so reviewers can inspect support independently.",
-        "- Confidence reflects strength and completeness of available evidence.",
-        "- Source Agreement reflects whether cited sources align, conflict, or remain too sparse.",
-    ]
-
+    from src.exporters.report_generator import build_company_report_markdown
     path = os.path.join(workdir, "final_report.md")
+    content = build_company_report_markdown(report)
     with open(path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
+        f.write(content)
     return path
