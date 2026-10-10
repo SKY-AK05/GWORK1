@@ -1801,12 +1801,14 @@ def _build_prospect_record(
     registry_hosts = {"companieshouse.gov.uk", "company-information.service.gov.uk"}
     source_models = memo.sources if memo else []
     sources = [item.model_dump() for item in source_models]
-    official_domain = None
-    for source in sources:
-        host = urlparse(source["url"]).netloc.lower().split(":", 1)[0].removeprefix("www.")
-        if host and not any(host == h or host.endswith("." + h) for h in social_hosts | registry_hosts):
-            official_domain = host
-            break
+    known_match = re.search(r"Known website/domain:\s*(https?://[^\s.]+(?:\.[^\s]+)?)", state.get("task", ""), re.IGNORECASE)
+    official_domain = urlparse(known_match.group(1)).netloc.lower().split(":", 1)[0].removeprefix("www.") if known_match else None
+    if not official_domain:
+        for source in sources:
+            host = urlparse(source["url"]).netloc.lower().split(":", 1)[0].removeprefix("www.")
+            if host and not any(host == h or host.endswith("." + h) for h in social_hosts | registry_hosts):
+                official_domain = host
+                break
 
     evidence = []
     for source in sources:
@@ -1822,13 +1824,13 @@ def _build_prospect_record(
         brand_name=str(target),
         official_domain=official_domain,
         legal_entity_name=matched.get("candidate_name"),
-        jurisdiction=("United Kingdom" if "united kingdom" in state.get("task", "").lower() else None),
+        jurisdiction=("United Kingdom" if "united kingdom" in state.get("task", "").lower() else ("India" if " in india" in state.get("task", "").lower() else None)),
         registration_number=matched.get("candidate_id") or matched.get("company_number"),
         company_description=report.executive_summary,
         sources=sources,
         evidence=evidence,
         identity_match_status=identity_status,
-        registration_verification_status=registry.get("outcome", "inconclusive_verification"),
+        registration_verification_status=(registry.get("outcome", "inconclusive_verification") if "united kingdom" in state.get("task", "").lower() else "inconclusive_verification"),
         confidence="high" if identity_status == "confirmed_match" else ("medium" if sources else "low"),
         unresolved_questions=report.open_questions,
     )

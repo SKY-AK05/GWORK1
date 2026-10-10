@@ -1,0 +1,176 @@
+{
+  "schema_version": "1.0",
+  "run_id": "57628e24e72593e0",
+  "status": "partial",
+  "task": "Investigate ORCHVATE as a company in India. Input company: ORCHVATE. Target country: India. Resolve the brand versus legal entity, distinguish similarly named companies, and use public or explicitly authorized information only. Cover identity, country of origin/incorporation/headquarters, operations, products/services, customers/partnerships, leadership, workforce and hiring signals, public social presence, recent developments, market context, risks, and unresolved questions. Known website/domain: https://orchvate.com. Recent-development period: last 12 months.",
+  "depth": "comprehensive",
+  "model": "azure/gpt-5.4-mini",
+  "writer_model": "azure/gpt-5.4-mini",
+  "search_plan": [
+    "ORCHVATE India company legal entity",
+    "site:orchvate.com ORCHVATE India about legal name",
+    "orchvate.com company registration India",
+    "ORCHVATE LLP Pvt Ltd India",
+    "site:orchvate.com services ORCHVATE",
+    "site:linkedin.com/company ORCHVATE",
+    "site:instagram.com ORCHVATE",
+    "site:facebook.com ORCHVATE",
+    "site:x.com ORCHVATE OR site:twitter.com ORCHVATE",
+    "site:youtube.com ORCHVATE",
+    "site:tiktok.com ORCHVATE",
+    "site:find-and-update.company-information.service.gov.uk/company ORCHVATE Companies House",
+    "@gmail ORCHVATE",
+    "@indiafilings ORCHVATE",
+    "\"ORCHVATE LLP\" site:orchtevate.com OR site:orchvate.com"
+  ],
+  "source_count": 4,
+  "coverage_summary": {
+    "search_queries": 12,
+    "search_results": 15,
+    "search_failures": 9,
+    "fetched_pages": 7,
+    "fetch_failures": 2
+  },
+  "tool_errors": [
+    {
+      "query": "ORCHVATE India company legal entity",
+      "provider": "ddgs_search",
+      "attempt": 1,
+      "status": "success",
+      "result_count": 5,
+      "retryable": false
+    },
+    {
+      "query": "site:orchvate.com ORCHVATE India about legal name",
+      "provider": "ddgs_search",
+      "attempt": 1,
+      "status": "failed",
+      "reason": "timeout",
+      "retryable": true
+    },
+    {
+      "query": "site:orchvate.com ORCHVATE India about legal name",
+      "provider": "ddgs_search",
+      "attempt": 2,
+      "status": "failed",
+      "reason": "timeout",
+      "retryable": false
+    },
+    {
+      "query": "orchvate.com company registration India",
+      "provider": "ddgs_search",
+      "attempt": 1,
+      "status": "failed",
+      "reason": "timeout",
+      "retryable": true
+    },
+    {
+      "query": "orchvate.com company registration India",
+      "provider": "ddgs_search",
+      "attempt": 2,
+      "status": "failed",
+      "reason": "timeout",
+      "retryable": false
+    },
+    {
+      "query": "ORCHVATE LLP Pvt Ltd India",
+      "provider": "ddgs_search",
+      "attempt": 1,
+      "status": "failed",
+      "reason": "timeout",
+      "retryable": true
+    },
+    {
+      "query": "ORCHVATE LLP Pvt Ltd India",
+      "provider": "ddgs_search",
+      "attempt": 2,
+      "status": "failed",
+      "reason": "timeout",
+      "retryable": false
+    },
+    {
+      "query": "site:orchvate.com services ORCHVATE",
+      "provider": "ddgs_search",
+      "attempt": 1,
+      "status": "failed",
+      "reason": "timeout",
+      "retryable": true
+    },
+    {
+      "query": "site:orchvate.com services ORCHVATE",
+      "provider": "ddgs_search",
+      "attempt": 2,
+      "status": "success",
+      "result_count": 5,
+      "retryable": false
+    },
+    {
+      "url": "https://www.companydetails.in/company/orchvate-llp",
+      "failure_type": "timeout",
+      "reason": "fetch timed out"
+    },
+    {
+      "url": "https://www.orchvate.com/",
+      "failure_type": "backend_or_blocked",
+      "reason": "no content returned",
+      "retrieved_at": "2026-10-09T20:31:35.881873+00:00"
+    }
+  ],
+  "registry_verification": {
+    "registry": "Companies House",
+    "outcome": "no_match_in_completed_searches",
+    "records": [],
+    "error": null,
+    "retrieved_at": "2026-10-10T07:23:49.091732+00:00",
+    "verification_status": "unverified"
+  },
+  "model_usage": [
+    {
+      "purpose": "TaskAnalysis",
+      "model": "gpt-5.4-mini",
+      "status": "success",
+      "retrieved_at": "2026-10-10T07:19:47.301381+00:00"
+    },
+    {
+      "purpose": "ResearchPlan",
+      "model": "gpt-5.4-mini",
+      "status": "success",
+      "retrieved_at": "2026-10-10T07:19:52.789462+00:00"
+    },
+    {
+      "purpose": "ResearchMemo",
+      "model": "gpt-5.4-mini",
+      "status": "success",
+      "retrieved_at": "2026-10-10T07:23:49.280614+00:00"
+    },
+    {
+      "purpose": "WriterReport",
+      "model": "gpt-5.4-mini",
+      "status": "success",
+      "retrieved_at": "2026-10-10T07:24:04.892417+00:00"
+    },
+    {
+      "purpose": "CritiqueResult",
+      "model": "gpt-5.4-mini",
+      "status": "success",
+      "retrieved_at": "2026-10-10T07:24:29.098946+00:00"
+    },
+    {
+      "purpose": "WriterReport",
+      "model": "gpt-5.4-mini",
+      "status": "success",
+      "retrieved_at": "2026-10-10T07:24:33.599146+00:00"
+    },
+    {
+      "purpose": "CritiqueResult",
+      "model": "gpt-5.4-mini",
+      "status": "success",
+      "retrieved_at": "2026-10-10T07:24:55.600082+00:00"
+    }
+  ],
+  "report_paths": {
+    "markdown": "/home/ubuntu/zerone-work/phase5-final-runs/orchvate/20261010T071945Z/company_research_report.md",
+    "json": "/home/ubuntu/zerone-work/phase5-final-runs/orchvate/20261010T071945Z/company_research.json",
+    "sources": "/home/ubuntu/zerone-work/phase5-final-runs/orchvate/20261010T071945Z/sources.json"
+  }
+}
