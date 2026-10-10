@@ -434,6 +434,8 @@ The public API surface is:
 
 The known-company flow is deliberately discovery-first: typing does not launch research, and the backend returns `409` if a caller tries to start a job without selecting a candidate from discovery. Blank-name searches require a country plus a narrowing filter. Discovery results are labelled as bounded public coverage, not as an exhaustive national registry.
 
+Discovery also performs conservative identity resolution. When records share country plus meaningful legal/brand/domain signals, the UI presents one identity group with a canonical selectable profile and an expandable “Other names and linked records” section. Strong shared identifiers can produce `confirmed_same_company`; weaker evidence produces `possible_same_company` and lists the missing proof, as with the ORCHVATE LLP / `orchvate.com` pair. Original candidate IDs, source URLs, and evidence are retained; uncertain records are never silently deleted or merged.
+
 ### Deployment
 
 The service is deployment-ready on a Python host that can run a background worker and persistent job/artifact storage. Set `ZERONE_WEB_HOST`, `ZERONE_WEB_PORT`, and the separate AI/search/registry variables through the host secret manager. Do not use GitHub Pages for this backend because it cannot run Python jobs or protect provider credentials. For a production deployment, put the service behind HTTPS, replace the in-process worker with a durable queue, and persist `webapp/data/jobs` in private storage.

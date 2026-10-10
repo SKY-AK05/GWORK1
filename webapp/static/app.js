@@ -17,12 +17,27 @@ function escapeHtml(value) { return String(value ?? '').replace(/[&<>'"]/g, c =>
 function badgeClass(status) { return String(status || '').toLowerCase().replace(/[^a-z]/g,''); }
 
 function renderCandidates(data) {
-  $('result-count').textContent = data.total ? `${data.total} candidate${data.total === 1 ? '' : 's'}` : 'no matches';
+  $('result-count').textContent = data.group_total ? `${data.group_total} identity group${data.group_total === 1 ? '' : 's'} · ${data.total} records` : 'no matches';
   $('coverage-note').textContent = data.error || `${data.coverage || 'Bounded public discovery'}${data.warnings?.length ? ' · ' + data.warnings.join(' ') : ''}`;
   const box=$('candidates');
   if (!data.candidates?.length) {
     box.className='candidates empty-state';
     box.innerHTML='<div class="empty-glyph">∅</div><strong>No verified candidate in the sources checked</strong><span>Try a spelling variation, broader keyword, country, city, or website.</span>';
+  } else if (data.identity_groups?.length) {
+    box.className='candidates';
+    box.innerHTML=data.identity_groups.map(group => {
+      const c=group.canonical_candidate;
+      const linked=group.records.filter(r => r.candidate_id !== c.candidate_id);
+      return `<article class="identity-group">
+        <div class="group-top"><div><span class="selected-label">IDENTITY RESOLUTION</span><h3>${escapeHtml(c.legal_name)}</h3><div class="candidate-meta">${escapeHtml(c.country)}${c.city ? ' · '+escapeHtml(c.city) : ''}${c.registration_number ? ' · '+escapeHtml(c.registration_number) : ''} · ${escapeHtml(c.status)}</div></div><span class="badge ${group.resolution==='possible_same_company'?'partial':'completed'}">${escapeHtml(group.resolution_label)}</span></div>
+        <p class="candidate-desc">${escapeHtml(c.description)}</p>
+        <p class="group-reason"><strong>Why linked:</strong> ${escapeHtml(group.resolution_reason)}</p>
+        ${linked.length ? `<details class="linked-records"><summary>Other names and linked records (${linked.length})</summary>${linked.map(r=>`<div class="linked-record"><strong>${escapeHtml(r.legal_name)}</strong><span>${escapeHtml(r.source_title)} · ${escapeHtml(r.website || r.source_url)}</span><small>${escapeHtml(r.match_strength)} · original ID ${escapeHtml(r.candidate_id)}</small></div>`).join('')}</details>` : ''}
+        ${group.evidence_gaps?.length ? `<details class="linked-records"><summary>What is still missing</summary><ul>${group.evidence_gaps.map(g=>`<li>${escapeHtml(g)}</li>`).join('')}</ul></details>` : ''}
+        <div class="group-bottom"><div class="candidate-source">↗ ${escapeHtml(c.source_title)} · ${escapeHtml(c.provider)} · verified ${escapeHtml(new Date(c.last_verified).toLocaleString())}</div><button class="select-btn" data-id="${escapeHtml(c.candidate_id)}">Select verified profile</button></div>
+      </article>`;
+    }).join('');
+    box.querySelectorAll('.select-btn').forEach(btn => btn.addEventListener('click', () => selectCandidate(data.candidates.find(c => c.candidate_id === btn.dataset.id))));
   } else {
     box.className='candidates';
     box.innerHTML=data.candidates.map(c => `<article class="candidate">

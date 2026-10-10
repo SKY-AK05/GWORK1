@@ -20,6 +20,12 @@ def test_orchvate_discovery_returns_distinct_source_backed_candidates():
     assert len(ids) == len(result["candidates"])
     assert all(item["source_url"].startswith("https://") for item in result["candidates"])
     assert any(item["registration_number"] == "AAO-4433" for item in result["candidates"])
+    assert len(result["identity_groups"]) == 1
+    group = result["identity_groups"][0]
+    assert group["resolution"] == "possible_same_company"
+    assert len(group["records"]) == 2
+    assert group["canonical_candidate"]["registration_number"] == "AAO-4433"
+    assert group["evidence_gaps"]
 
 
 def test_unknown_company_uses_bounded_search_or_actionable_provider_error():

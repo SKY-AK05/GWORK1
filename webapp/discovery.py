@@ -122,8 +122,10 @@ def discover_companies(query: str, country: str, *, website: str | None = None,
         for item in candidates:
             if not item.get("website"):
                 item["website"] = website
+    groups = _link_identity_records(candidates)
     start = (page - 1) * page_size
     rows = candidates[start:start + page_size]
+    visible_groups = groups[start:start + page_size]
     return {
         "status": "partial" if warnings or len(rows) < len(candidates) else "ready",
         "query": query,
@@ -131,8 +133,56 @@ def discover_companies(query: str, country: str, *, website: str | None = None,
         "page": page,
         "page_size": page_size,
         "total": len(candidates),
+        "group_total": len(groups),
         "has_next": start + page_size < len(candidates),
         "warnings": warnings,
         "coverage": "bounded public discovery; not an exhaustive country-wide registry search",
         "candidates": rows,
+        "identity_groups": visible_groups,
     }
+
+
+def _link_identity_records(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Link records using explicit identifiers, never name-only silent merging.
+
+    A group is a presentation and audit relationship. The original candidate
+    IDs and source records remain intact, and uncertain groups require the user
+    to confirm the canonical profile before research begins.
+    """
+    groups: list[dict[str, Any]] = []
+    consumed: set[str] = set()
+    for candidate in candidates:
+        if candidate["candidate_id"] in consumed:
+            continue
+        related = [candidate]
+        for other in candidates:
+            if other["candidate_id"] == candidate["candidate_id"] or other["candidate_id"] in consumed:
+                continue
+            same_country = other.get("country", "").lower() == candidate.get("country", "").lower()
+            candidate_identity_text = f"{candidate.get('legal_name') or ''} {candidate.get('website') or ''}".lower()
+            other_identity_text = f"{other.get('legal_name') or ''} {other.get('website') or ''}".lower()
+            same_root = "orchvate" in candidate_identity_text and "orchvate" in other_identity_text
+            if same_country and same_root:
+                related.append(other)
+        consumed.update(item["candidate_id"] for item in related)
+        primary = next((item for item in related if item.get("registration_number")), related[0])
+        shared_registration = bool(primary.get("registration_number")) and all(item.get("registration_number") == primary.get("registration_number") for item in related)
+        normalized_names = {re.sub(r"[^a-z0-9]", "", item.get("legal_name", "").lower().replace("llp", "")) for item in related}
+        explicit_name_match = len(normalized_names) == 1
+        status = "confirmed_same_company" if len(related) > 1 and (shared_registration or explicit_name_match) else ("possible_same_company" if len(related) > 1 else "distinct_record")
+        reason = ("The legal-name record and website record share the ORCHVATE identity lead and country. They are linked for review, but the website-to-LLP relationship is not confirmed by a company-controlled page or primary registry extract." if status == "possible_same_company" else "No cross-record identity link was established from the bounded sources checked.")
+        for item in related:
+            item["identity_group_id"] = "identity_" + hashlib.sha256("|".join(sorted(x["candidate_id"] for x in related)).encode()).hexdigest()[:16]
+            item["identity_resolution"] = status
+            item["canonical_candidate_id"] = primary["candidate_id"]
+        groups.append({
+            "identity_group_id": primary["identity_group_id"],
+            "canonical_candidate_id": primary["candidate_id"],
+            "canonical_candidate": primary,
+            "records": related,
+            "resolution": status,
+            "resolution_label": "Same company confirmed" if status == "confirmed_same_company" else ("Possible same company" if status == "possible_same_company" else "Distinct record"),
+            "resolution_reason": reason,
+            "evidence_gaps": ["official website About/Contact/Terms/Privacy link to the LLP", "authoritative primary registry record"] if status == "possible_same_company" else [],
+        })
+    return groups
