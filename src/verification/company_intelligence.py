@@ -241,3 +241,64 @@ def extract_identity_candidates(target_name: str, pages: list[dict[str, Any]]) -
                 "retrieved_at": page.get("retrieved_at") or _now(),
             })
     return results
+
+
+def extract_entity_relationships(pages: list[dict[str, Any]], target_name: Optional[str] = None) -> list[dict[str, Any]]:
+    """Extract explicit relationship language without treating names as proof."""
+    relationship_terms = {
+        "parent": ("parent company", "holding company", "owned by"),
+        "subsidiary": ("subsidiary", "subsidiaries", "wholly owned"),
+        "branch": ("branch office", "branch in", "our offices", "locations"),
+        "brand": ("brand of", "trading as", "operated under the brand"),
+        "alias": ("also known as", "formerly known as", "doing business as"),
+        "acquisition": ("acquired", "acquisition", "merged with"),
+    }
+    results: list[dict[str, Any]] = []
+    for page in pages:
+        if not _page_matches_target(page, target_name):
+            continue
+        for line in page.get("content", "").splitlines():
+            lowered = line.lower()
+            kind = next((name for name, terms in relationship_terms.items() if any(term in lowered for term in terms)), None)
+            if not kind:
+                continue
+            results.append(_record(
+                page.get("url", ""), line, page.get("retrieved_at"),
+                relationship_type=kind,
+                related_name=line[:180],
+                verification_status="candidate",
+                confidence="medium",
+            ))
+    return results[:80]
+
+
+def extract_workforce_signals(pages: list[dict[str, Any]], target_name: Optional[str] = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Extract public hiring/workforce signals; never infer employment from a mention."""
+    workforce: list[dict[str, Any]] = []
+    hiring: list[dict[str, Any]] = []
+    job_terms = ("careers", "jobs", "vacancy", "we're hiring", "join our team", "open role", "job description")
+    mode_terms = ("remote", "hybrid", "on-site", "onsite", "office-based", "work from home")
+    skill_terms = ("requirements", "skills", "experience with", "proficiency in", "must have")
+    for page in pages:
+        if not _page_matches_target(page, target_name):
+            continue
+        url = page.get("url", "")
+        title = page.get("title", "")
+        page_text = page.get("content", "")
+        is_job_page = any(term in f"{url} {title} {page_text}".lower() for term in job_terms)
+        for line in page_text.splitlines():
+            lowered = line.lower()
+            if is_job_page and (any(term in lowered for term in mode_terms) or any(term in lowered for term in skill_terms)):
+                modes = [term for term in mode_terms if term in lowered]
+                skills = [term for term in ("python", "javascript", "typescript", "sql", "sales", "marketing", "operations", "finance", "design", "react", "aws") if term in lowered]
+                hiring.append(_record(
+                    url, line, page.get("retrieved_at"), signal_type="public_job_posting",
+                    role=title[:160], work_arrangement=modes or ["not stated"], required_skills=skills,
+                    verification_status="published_unverified", confidence="medium",
+                ))
+            if any(word in lowered for word in ("joined", "appointed", "promoted", "left the company", "departed", "new ceo", "new director")):
+                workforce.append(_record(
+                    url, line, page.get("retrieved_at"), signal_type="position_change",
+                    verification_status="candidate", confidence="medium",
+                ))
+    return workforce[:80], hiring[:80]

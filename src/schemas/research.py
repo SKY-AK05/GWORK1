@@ -156,6 +156,11 @@ class ResearchMemo(BaseModel):
     fetch_failures: List[Dict[str, Any]] = Field(default_factory=list)
     run_status: str = Field(default="completed")
     india_verification: Dict[str, Any] = Field(default_factory=dict)
+    entity_relationships: List[Dict[str, Any]] = Field(default_factory=list)
+    business_analysis: Dict[str, Any] = Field(default_factory=dict)
+    workforce_signals: List[Dict[str, Any]] = Field(default_factory=list)
+    hiring_signals: List[Dict[str, Any]] = Field(default_factory=list)
+    claim_ledger: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class ClaimRecord(BaseModel):
@@ -245,6 +250,11 @@ class WriterReport(BaseModel):
     fetch_failures: List[Dict[str, Any]] = Field(default_factory=list)
     run_status: str = Field(default="completed")
     india_verification: Dict[str, Any] = Field(default_factory=dict)
+    entity_relationships: List[Dict[str, Any]] = Field(default_factory=list)
+    business_analysis: Dict[str, Any] = Field(default_factory=dict)
+    workforce_signals: List[Dict[str, Any]] = Field(default_factory=list)
+    hiring_signals: List[Dict[str, Any]] = Field(default_factory=list)
+    claim_ledger: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class CritiqueResult(BaseModel):

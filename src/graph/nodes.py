@@ -55,8 +55,10 @@ from src.verification.company_intelligence import (
     detect_contradictions,
     extract_business_contacts,
     extract_dated_events,
+    extract_entity_relationships,
     extract_identity_candidates,
     extract_roles,
+    extract_workforce_signals,
     search_companies_house,
 )
 from src.verification.india import build_india_verification
@@ -593,7 +595,13 @@ async def plan_search_node(state: ResearchState) -> dict:
             [
                 SystemMessage(
                     content=(
-                        "Create an evidence-driven research plan. Use only these tool categories: "
+                        "Create an evidence-driven company investigation plan. Treat the input company name as a search question, not an established identity. "
+                        "First generate candidate entities and compare whether they are the same, related, or unrelated. "
+                        "Cover legal entities, brands, subsidiaries, branches, aliases, locations, registration details, and websites. "
+                        "Also plan targeted evidence for purpose, mission, business model, products, services, operations, customers, beneficiaries, partnerships, competitors, industry, founders, leadership, employees, hiring, joiners, departures, position changes, and public job postings. "
+                        "Use adaptive follow-up questions to fill the highest-value gaps and seek counter-evidence. "
+                        "Prioritize official registries, company-controlled pages, filings, and reliable reporting. "
+                        "Use only these tool categories: "
                         "discovery, crawling, registry, browser. Never invent tool names. "
                         f"Return at most {n_queries} plan items, each with concise queries, required fields, "
                         "preferred source types, identity signals, evidence requirements, risks, priority, "
@@ -904,6 +912,10 @@ async def verify_company_intelligence_node(state: ResearchState) -> dict:
             "dated_events": [],
             "contradictions": [],
             "business_contacts": [],
+            "entity_relationships": [],
+            "business_analysis": {},
+            "workforce_signals": [],
+            "hiring_signals": [],
         }
 
     target = target_for_registry
@@ -913,6 +925,8 @@ async def verify_company_intelligence_node(state: ResearchState) -> dict:
     roles = extract_roles(pages, target)
     events = extract_dated_events(pages, target)
     contacts = extract_business_contacts(pages, target)
+    relationships = extract_entity_relationships(pages, target)
+    workforce, hiring = extract_workforce_signals(pages, target)
 
     claims: List[dict] = []
     for page in pages:
@@ -936,6 +950,9 @@ async def verify_company_intelligence_node(state: ResearchState) -> dict:
         "dated_events": events,
         "contradictions": contradictions,
         "business_contacts": contacts,
+        "entity_relationships": relationships,
+        "workforce_signals": workforce,
+        "hiring_signals": hiring,
     }
 
 
@@ -967,6 +984,8 @@ async def build_memo_node(state: ResearchState) -> dict:
             "india_verification": state.get("india_verification", {}),
             "identity_candidates": [], "role_records": [], "dated_events": [],
             "contradictions": [], "business_contacts": [],
+            "entity_relationships": [], "business_analysis": {},
+            "workforce_signals": [], "hiring_signals": [], "claim_ledger": [],
             "search_failures": state.get("search_failures", []),
             "fetch_failures": state.get("fetch_failures", []),
             "run_status": state.get("run_status", "blocked"),
@@ -1016,6 +1035,11 @@ async def build_memo_node(state: ResearchState) -> dict:
                     "- For source_quality_notes: briefly assess whether sources are peer-reviewed, "
                     "  vendor-produced, journalism, or blog posts; note any recency gaps\n"
                     "- If this is a comparison task, fairly cover each target and capture tradeoffs\n"
+                    "- Treat the company name as unresolved: compare candidate entities before describing the company\n"
+                    "- Populate entity_relationships with legal entity/brand/subsidiary/branch/alias links and relationship status; never merge on name alone\n"
+                    "- Populate business_analysis for purpose, mission, model, products, services, operations, customers, beneficiaries, partnerships, competitors, and industry\n"
+                    "- Populate workforce_signals and hiring_signals from public evidence, including leadership, joiners, departures, position changes, job skills, locations, and remote/hybrid/office mode\n"
+                    "- Populate claim_ledger for important claims using exactly one status: verified_fact, secondary_claim, inference, or unknown; attach source references and explain gaps\n"
                     "- Only request output structures the user explicitly asked for\n"
                     "Return structured JSON matching the requested schema."
                 )
@@ -1043,6 +1067,9 @@ async def build_memo_node(state: ResearchState) -> dict:
             "dated_events": state.get("dated_events", []),
             "contradictions": state.get("contradictions", []),
             "business_contacts": state.get("business_contacts", []),
+            "entity_relationships": state.get("entity_relationships", []),
+            "workforce_signals": state.get("workforce_signals", []),
+            "hiring_signals": state.get("hiring_signals", []),
             "search_failures": state.get("search_failures", []),
             "fetch_failures": state.get("fetch_failures", []),
             "run_status": state.get("run_status", "completed"),
@@ -1390,6 +1417,13 @@ def _build_writer_system_prompt(is_multi: bool, depth: str) -> str:
         "  tentative, and what would change the assessment.\n"
         "- executive_summary: 3-5 sentences naming the single most important finding, "
         "  overall confidence, and key open uncertainty.\n\n"
+        "Company-investigation coverage requirements:\n"
+        "- Start with an entity comparison: list every plausible candidate, legal entity, brand, subsidiary, branch, alias, location, registration detail, and website; state whether each is related, different, or unresolved. Never merge on name similarity alone.\n"
+        "- Include business analysis covering purpose, mission, business model, products, services, operations, customers, beneficiaries, partnerships, competitors, and industry.\n"
+        "- Include leadership and workforce coverage: founders, executives, employees, hiring activity, recent joiners, departures, and position changes. Do not infer current employment from a stale profile.\n"
+        "- Include public job-posting analysis: roles, required skills, work locations, and remote/hybrid/office arrangement; label the evidence date and source status.\n"
+        "- Include risks and unresolved questions, with targeted next searches that would resolve the highest-value gaps.\n"
+        "- Populate claim_ledger using exactly: verified_fact, secondary_claim, inference, or unknown. Every important claim needs source references or an explicit unknown label.\n\n"
         "Quality constraints:\n"
         "- Separate each claim from its supporting evidence\n"
         "- Assign confidence: High, Medium, or Low\n"
@@ -1542,6 +1576,9 @@ async def build_report_node(state: ResearchState) -> dict:
             "dated_events": state.get("dated_events", []),
             "contradictions": state.get("contradictions", []),
             "business_contacts": state.get("business_contacts", []),
+            "entity_relationships": state.get("entity_relationships", []),
+            "workforce_signals": state.get("workforce_signals", []),
+            "hiring_signals": state.get("hiring_signals", []),
             "search_failures": state.get("search_failures", []),
             "fetch_failures": state.get("fetch_failures", []),
             "run_status": state.get("run_status", "completed"),
@@ -2044,12 +2081,19 @@ def _save_memo(
         ("Dated Events", memo.dated_events),
         ("Contradictions", memo.contradictions),
         ("Public Business Contacts", memo.business_contacts),
+        ("Entity Relationships", memo.entity_relationships),
+        ("Workforce Signals", memo.workforce_signals),
+        ("Hiring Signals", memo.hiring_signals),
+        ("Claim Ledger", memo.claim_ledger),
     ):
         if records:
             lines += [f"### {label}", ""]
             for record in records:
                 lines.append(f"- {json.dumps(record, ensure_ascii=False, sort_keys=True)}")
     lines.append("")
+
+    if memo.business_analysis:
+        lines += ["### Business Analysis", "", json.dumps(memo.business_analysis, ensure_ascii=False, indent=2), ""]
 
     lines += ["## Run Status and Failure Records", "", f"- Run status: {memo.run_status}"]
     for label, records in (("Search failures", memo.search_failures), ("Fetch failures", memo.fetch_failures)):
@@ -2154,12 +2198,19 @@ def _save_report(report: WriterReport, workdir: str) -> str:
         ("Dated Events", report.dated_events),
         ("Contradictions", report.contradictions),
         ("Public Business Contacts", report.business_contacts),
+        ("Entity Relationships", report.entity_relationships),
+        ("Workforce Signals", report.workforce_signals),
+        ("Hiring Signals", report.hiring_signals),
+        ("Claim Ledger", report.claim_ledger),
     ):
         if records:
             lines += [f"### {label}", ""]
             for record in records:
                 lines.append(f"- {json.dumps(record, ensure_ascii=False, sort_keys=True)}")
     lines.append("")
+
+    if report.business_analysis:
+        lines += ["### Business Analysis", "", json.dumps(report.business_analysis, ensure_ascii=False, indent=2), ""]
 
     lines += ["## Run Status and Failure Records", "", f"- Run status: {report.run_status}"]
     for label, records in (("Search failures", report.search_failures), ("Fetch failures", report.fetch_failures)):

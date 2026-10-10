@@ -442,6 +442,14 @@ The service is deployment-ready on a Python host that can run a background worke
 
 Phase 6 was locally tested and publicly verified in the sandbox at `https://8787-ikiddm8cbfwr8f25bm6wk-fe51947d.sg2.manus.computer`. This URL is temporary and is not a permanent production deployment.
 
+## Company Research Agent Mode
+
+The product research command treats a company name as a question, not as an established identity. It creates candidate entities, compares legal names, brands, subsidiaries, branches, locations, registrations, websites, and aliases, then records whether candidates are related, distinct, or unresolved. Name similarity alone is never sufficient for a merge.
+
+The investigation plan covers business purpose and mission, business model, products, services, operations, customers, beneficiaries, partnerships, competitors, and industry. It also searches for founders and leadership, public workforce signals, joiners, departures, position changes, and job postings. Job evidence records the role, skills, location, and remote/hybrid/office arrangement when explicitly published; it does not infer current employment from stale profiles.
+
+The structured memo and report expose `entity_relationships`, `business_analysis`, `workforce_signals`, `hiring_signals`, and `claim_ledger`. Important claims are classified as `verified_fact`, `secondary_claim`, `inference`, or `unknown`, with source references and evidence gaps. Adaptive follow-up planning prioritizes unresolved identity links, missing primary records, contradictory facts, and under-covered hiring or workforce questions.
+
 ---
 
 ## Testing

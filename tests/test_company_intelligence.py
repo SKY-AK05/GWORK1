@@ -4,7 +4,9 @@ from src.verification.company_intelligence import (
     detect_contradictions,
     extract_business_contacts,
     extract_dated_events,
+    extract_entity_relationships,
     extract_roles,
+    extract_workforce_signals,
     match_company_identity,
     search_companies_house,
 )
@@ -87,3 +89,22 @@ def test_role_extraction_keeps_page_retrieval_provenance():
     assert roles
     assert any(item["role_status"] == "current_claim" for item in roles)
     assert all(item["source_url"] == "https://example.com/team" for item in roles)
+
+
+def test_relationship_extraction_does_not_turn_name_similarity_into_identity_proof():
+    links = extract_entity_relationships([
+        {"url": "https://example.com/about", "retrieved_at": "now", "content": "Example Holdings is the parent company of Example Labs."}
+    ], "Example")
+    assert links[0]["relationship_type"] == "parent"
+    assert links[0]["verification_status"] == "candidate"
+
+
+def test_public_job_posting_extracts_skills_and_work_arrangement():
+    workforce, hiring = extract_workforce_signals([
+        {"url": "https://example.com/careers", "retrieved_at": "now", "title": "Careers — Software Engineer", "content": "Join our team. Requirements: Python, SQL and AWS. Hybrid role in London."}
+    ], "Example")
+    assert not workforce
+    assert hiring[0]["signal_type"] == "public_job_posting"
+    assert "hybrid" in hiring[0]["work_arrangement"]
+    assert "python" in hiring[0]["required_skills"]
+    assert hiring[0]["verification_status"] == "published_unverified"

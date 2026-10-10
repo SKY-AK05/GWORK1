@@ -48,6 +48,11 @@ class ResearchState(TypedDict):
     dated_events: List[dict]           # dated company/person events
     contradictions: List[dict]        # conflicting claims kept unresolved
     business_contacts: List[dict]      # published but not assumed deliverable contacts
+    entity_relationships: List[dict]   # links among legal entities, brands, subsidiaries, branches, aliases
+    business_analysis: dict             # structured business-purpose and market evidence
+    workforce_signals: List[dict]       # leadership, employees, joiners, departures, position changes
+    hiring_signals: List[dict]          # public job-posting requirements and work arrangements
+    claim_ledger: List[dict]            # verified/secondary/inference/unknown claim labels
 
     # ── Multi-researcher (set by plan_researchers / execute_parallel_research) ──
     num_researchers: int               # >1 enables parallel researchers; default 1

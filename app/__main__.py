@@ -39,10 +39,14 @@ def _parser() -> argparse.ArgumentParser:
 
 def _build_task(args: argparse.Namespace) -> str:
     parts = [
-        f"Investigate {args.company} as a company in {args.country}.",
-        f"Input company: {args.company}. Target country: {args.country}.",
-        "Resolve the brand versus legal entity, distinguish similarly named companies, and use public or explicitly authorized information only.",
-        "Cover identity, country of origin/incorporation/headquarters, operations, products/services, customers/partnerships, leadership, workforce and hiring signals, public social presence, recent developments, market context, risks, and unresolved questions.",
+        f"Investigate the name '{args.company}' as an open company-identity question in {args.country}; do not assume the name identifies one business.",
+        f"Input name: {args.company}. Target jurisdiction/country: {args.country}.",
+        "Create candidate entities, compare identifiers, determine which candidates are unrelated, related, or the same real-world business, and never merge on name similarity alone.",
+        "Identify legal entities, brands, subsidiaries, branches, locations, registration details, websites, aliases, parent relationships, and evidence for or against each link.",
+        "Analyze purpose, mission, business model, products, services, operations, customers, beneficiaries, partnerships, competitors, and industry.",
+        "Research founders, leadership, employees, hiring activity, recent joiners, departures, position changes, and public job postings including skills, work locations, and remote/hybrid/office arrangements.",
+        "Use adaptive reasoning: plan searches, gather evidence, identify gaps, run targeted follow-ups, prioritize official registries/company pages/filings/reliable reporting, and distinguish verified facts, secondary claims, inferences, and unknowns.",
+        "Produce an executive summary, entity comparison, business analysis, leadership/workforce analysis, hiring analysis, recent developments, risks, source-backed claims, and unresolved questions.",
     ]
     if args.website:
         parts.append(f"Known website/domain: {args.website}.")
