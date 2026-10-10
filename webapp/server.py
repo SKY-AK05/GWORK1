@@ -62,7 +62,8 @@ def run_research(job_id: str) -> None:
     workdir = JOB_ROOT / job_id
     workdir.mkdir(parents=True, exist_ok=True)
     set_job(job_id, status="running", stage="initializing", progress=8,
-            message="Candidate confirmed. Initializing the existing research engine.")
+            message="Candidate confirmed. Initializing the research engine.",
+            social_channels={})
     command = [
         sys.executable, "-m", "app", "research",
         "--company", candidate["legal_name"],
@@ -81,35 +82,100 @@ def run_research(job_id: str) -> None:
         command += ["--recent", job["options"]["recent"]]
     env = os.environ.copy()
     env["PYTHONPATH"] = str(PROJECT) + os.pathsep + env.get("PYTHONPATH", "")
-    set_job(job_id, stage="researching", progress=24,
-            message="Running public discovery, fetching permitted sources, and preserving evidence gaps.")
+    set_job(job_id, stage="researching", progress=15,
+            message="Running public discovery and crawling sources...")
+
+    log_path = workdir / "job.log"
+    social_channels: dict[str, str] = {}
+    output_lines: list[str] = []
+
     try:
-        completed = subprocess.run(command, cwd=PROJECT, env=env, text=True,
-                                   capture_output=True, timeout=60 * 20)
+        proc = subprocess.Popen(
+            command,
+            cwd=PROJECT,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            encoding="utf-8",
+            errors="replace",
+        )
+        with open(log_path, "w", encoding="utf-8") as f:
+            for raw_line in iter(proc.stdout.readline, ""):
+                safe_line = re.sub(r"(?i)(api[_-]?key|token|secret)=\S+", r"\1=[redacted]", raw_line)
+                for key in ("AZURE_AI_API_KEY", "AZURE_OPENAI_API_KEY", "OPENROUTER_API_KEY", "TAVILY_API_KEY", "FIRECRAWL_API_KEY", "COMPANIES_HOUSE_API_KEY"):
+                    v = env.get(key)
+                    if v:
+                        safe_line = safe_line.replace(v, "[redacted]")
+                f.write(safe_line)
+                f.flush()
+                output_lines.append(safe_line)
+
+                line_lower = safe_line.lower()
+                if "linkedin.com" in line_lower:
+                    m = re.search(r"https?://(?:www\.)?linkedin\.com/(?:company|in)/[A-Za-z0-9_.-]+/?", safe_line, re.I)
+                    if m:
+                        social_channels["LinkedIn"] = m.group(0).rstrip(".,;")
+                if "instagram.com" in line_lower:
+                    m = re.search(r"https?://(?:www\.)?instagram\.com/[A-Za-z0-9_.-]+/?", safe_line, re.I)
+                    if m:
+                        social_channels["Instagram"] = m.group(0).rstrip(".,;")
+                if "reddit.com" in line_lower:
+                    m = re.search(r"https?://(?:www\.)?reddit\.com/(?:r|user)/[A-Za-z0-9_.-]+/?", safe_line, re.I)
+                    if m:
+                        social_channels["Reddit"] = m.group(0).rstrip(".,;")
+                if "x.com" in line_lower or "twitter.com" in line_lower:
+                    m = re.search(r"https?://(?:www\.)?(?:x|twitter)\.com/[A-Za-z0-9_.-]+/?", safe_line, re.I)
+                    if m:
+                        social_channels["X (Twitter)"] = m.group(0).rstrip(".,;")
+                if "youtube.com" in line_lower:
+                    m = re.search(r"https?://(?:www\.)?youtube\.com/(?:@[A-Za-z0-9_.-]+|channel/[A-Za-z0-9_-]+)/?", safe_line, re.I)
+                    if m:
+                        social_channels["YouTube"] = m.group(0).rstrip(".,;")
+
+                stripped = safe_line.strip()
+                if stripped.startswith("[FETCH]") or stripped.startswith("[SCRAPE]"):
+                    parts = stripped.split()
+                    url_display = parts[1] if len(parts) > 1 else stripped
+                    set_job(job_id, stage="crawling", progress=35, message=f"Crawling: {url_display}", social_channels=dict(social_channels))
+                elif "researcher memo" in line_lower or "deduplicated" in line_lower:
+                    set_job(job_id, stage="analysis", progress=65, message="Cross-referencing claims and evidence across sources...", social_channels=dict(social_channels))
+                elif "report directory" in line_lower or "company_research_report.md" in line_lower:
+                    set_job(job_id, stage="writing", progress=85, message="Compiling final Markdown & PDF reports...", social_channels=dict(social_channels))
+                elif stripped:
+                    set_job(job_id, social_channels=dict(social_channels))
+
+        proc.wait(timeout=60 * 20)
+        returncode = proc.returncode
     except subprocess.TimeoutExpired:
+        if proc: proc.kill()
         set_job(job_id, status="failed", stage="timeout", progress=100,
-                message="Research exceeded the bounded 20-minute job limit.")
+                message="Research exceeded the bounded 20-minute job limit.",
+                social_channels=dict(social_channels))
         return
-    output = (completed.stdout or "") + "\n" + (completed.stderr or "")
-    # Keep a bounded diagnostic log without exposing environment values.
-    safe_log = re.sub(r"(?i)(api[_-]?key|token|secret)=\S+", r"\1=[redacted]", output)[-12000:]
-    for key in ("AZURE_AI_API_KEY", "AZURE_OPENAI_API_KEY", "OPENROUTER_API_KEY", "TAVILY_API_KEY", "FIRECRAWL_API_KEY", "COMPANIES_HOUSE_API_KEY"):
-        value = env.get(key)
-        if value:
-            safe_log = safe_log.replace(value, "[redacted]")
-    (workdir / "job.log").write_text(safe_log, encoding="utf-8")
+    except Exception as exc:
+        set_job(job_id, status="failed", stage="failed", progress=100,
+                message=f"Subprocess error: {exc}",
+                social_channels=dict(social_channels))
+        return
+
     reports = next((p for p in (workdir / "reports" / candidate["legal_name"].lower().replace(" ", "-")).glob("*") if p.is_dir()), None)
     if reports is None:
         dirs = [p for p in (workdir / "reports").rglob("*") if p.is_dir()] if (workdir / "reports").exists() else []
         reports = max(dirs, key=lambda p: p.stat().st_mtime) if dirs else None
-    if completed.returncode == 0 and reports:
+
+    if returncode == 0 and reports:
         set_job(job_id, status="completed", stage="complete", progress=100,
-                message="Research completed. Review the partial/completed status in the report metadata.",
-                artifact_dir=str(reports))
+                message="Research completed successfully. Final Markdown & PDF reports ready.",
+                artifact_dir=str(reports), social_channels=dict(social_channels))
     else:
+        err_lines = [l.strip() for l in output_lines[-15:] if l.strip()]
+        err_summary = err_lines[-1] if err_lines else "Subprocess exited with a non-zero status."
         set_job(job_id, status="failed", stage="failed", progress=100,
-                message="The research engine failed; no fabricated result was created.",
-                error="Research subprocess exited with a non-zero status.")
+                message=f"Research stopped: {err_summary}",
+                error="\n".join(err_lines[-10:]),
+                social_channels=dict(social_channels))
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -157,6 +223,17 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"error": "Job not found."}, 404)
             else:
                 self.send_json(public_job(job))
+            return
+        match = re.fullmatch(r"/api/jobs/([A-Za-z0-9_-]+)/logs", parsed.path)
+        if match:
+            with LOCK:
+                job = JOBS.get(match.group(1))
+            if not job:
+                self.send_json({"error": "Job not found."}, 404)
+                return
+            log_file = JOB_ROOT / match.group(1) / "job.log"
+            logs = log_file.read_text(encoding="utf-8", errors="replace")[-30000:] if log_file.is_file() else ""
+            self.send_json({"job_id": match.group(1), "logs": logs, "social_channels": job.get("social_channels", {})})
             return
         match = re.fullmatch(r"/api/jobs/([A-Za-z0-9_-]+)/artifacts", parsed.path)
         if match:

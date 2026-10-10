@@ -238,8 +238,8 @@ class WriterReport(BaseModel):
     architecture_diagram_mermaid: Optional[str] = Field(
         default=None, description="Mermaid diagram (only when requested)"
     )
-    open_questions: List[str] = Field(description="Remaining uncertainties worth further investigation")
-    sources: List[str] = Field(description="Source citations as 'title — url' strings")
+    open_questions: List[str] = Field(default_factory=list, description="Remaining uncertainties worth further investigation")
+    sources: List[str] = Field(default_factory=list, description="Source citations as 'title — url' strings")
     registry_verification: Dict[str, Any] = Field(default_factory=dict)
     identity_candidates: List[Dict[str, Any]] = Field(default_factory=list)
     role_records: List[Dict[str, Any]] = Field(default_factory=list)

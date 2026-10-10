@@ -116,13 +116,74 @@ async function startResearch(event) {
 
 function renderJob(job) {
   $('job-state').textContent=job.status==='completed'?'Research ready':job.status==='partial'?'Research partial':job.status[0].toUpperCase()+job.status.slice(1);
-  $('job-badge').textContent=job.status; $('job-badge').className='badge '+job.status; $('progress-bar').style.width=`${job.progress || 0}%`; $('job-stage').textContent=job.stage || 'working'; $('job-progress').textContent=`${job.progress || 0}%`; $('job-message').textContent=job.message || '';
+  $('job-badge').textContent=job.status;
+  $('job-badge').className='badge '+job.status;
+  $('progress-bar').style.width=`${job.progress || 0}%`;
+  $('job-stage').textContent=job.stage || 'working';
+  $('job-progress').textContent=`${job.progress || 0}%`;
+  $('job-message').textContent=job.message || '';
+
+  const errEl = $('job-error');
+  if (job.status === 'failed') {
+    errEl.hidden = false;
+    errEl.innerHTML = `<strong>Research Process Stopped:</strong> ${escapeHtml(job.error || job.message)}<br><small>See live terminal execution output below for details.</small>`;
+    $('job-log-view').hidden = false;
+    $('toggle-log-btn').textContent = 'Hide live terminal';
+  } else {
+    errEl.hidden = true;
+  }
+
+  // Render discovered social channels
+  const channels = job.social_channels || {};
+  const channelKeys = Object.keys(channels);
+  const channelsPanel = $('channels-panel');
+  if (channelKeys.length > 0) {
+    channelsPanel.hidden = false;
+    const icons = {'LinkedIn': '💼', 'Instagram': '📸', 'Reddit': '💬', 'X (Twitter)': '🐦', 'YouTube': '📺'};
+    $('channels-list').innerHTML = channelKeys.map(k => {
+      const url = channels[k];
+      return `<div class="channel-card">
+        <span class="channel-icon">${icons[k] || '🔗'}</span>
+        <div class="channel-info">
+          <strong>${escapeHtml(k)}</strong>
+          <a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a>
+        </div>
+        <span class="channel-badge connected">Public Connected</span>
+      </div>`;
+    }).join('');
+  }
 }
+
 async function poll(id) {
   clearTimeout(pollTimer);
-  try { const job=await api(`/api/jobs/${id}`); renderJob(job); if(['queued','running'].includes(job.status)){pollTimer=setTimeout(()=>poll(id),1200)}else if(job.status==='completed'){loadArtifacts(id)} }
-  catch(error){renderJob({status:'failed',stage:'connection',progress:100,message:error.message});}
+  try {
+    const job = await api(`/api/jobs/${id}`);
+    renderJob(job);
+
+    // Fetch live terminal logs
+    const logData = await api(`/api/jobs/${id}/logs`).catch(() => null);
+    if (logData && logData.logs) {
+      const logBox = $('job-log-view');
+      logBox.textContent = logData.logs;
+      if (!logBox.hidden) {
+        logBox.scrollTop = logBox.scrollHeight;
+      }
+      if (logData.social_channels && Object.keys(logData.social_channels).length) {
+        job.social_channels = logData.social_channels;
+        renderJob(job);
+      }
+    }
+
+    if (['queued','running'].includes(job.status)) {
+      pollTimer = setTimeout(() => poll(id), 1200);
+    } else if (job.status === 'completed') {
+      loadArtifacts(id);
+    }
+  } catch(error) {
+    renderJob({status:'failed',stage:'connection',progress:100,message:error.message});
+  }
 }
+
 async function loadArtifacts(id) {
   const data=await api(`/api/jobs/${id}/artifacts`);
   $('artifact-list').innerHTML=data.files.map(file=>{
@@ -130,6 +191,13 @@ async function loadArtifacts(id) {
     return `<a class="artifact-link ${isPdf?'pdf-badge':''}" download href="${file.url}">${isPdf ? '📄 ' : ''}${escapeHtml(file.name)} ↓</a>`;
   }).join('');
 }
+
+$('toggle-log-btn').addEventListener('click', () => {
+  const box = $('job-log-view');
+  box.hidden = !box.hidden;
+  $('toggle-log-btn').textContent = box.hidden ? 'Show live terminal' : 'Hide live terminal';
+});
+
 $('discover-form').addEventListener('submit', e=>{e.preventDefault();discover(1)});
 $('research-form').addEventListener('submit', startResearch);
 $('change-selection').addEventListener('click', ()=>{$('research-section').hidden=true;selected=null});

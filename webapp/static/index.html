@@ -68,6 +68,21 @@
           <div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div>
           <div class="job-stage"><span id="job-stage">queued</span><span id="job-progress">0%</span></div>
           <p id="job-message"></p>
+          <div id="job-error" class="notice error" hidden></div>
+          <div id="channels-panel" class="channels-panel" hidden>
+            <div class="channels-header">
+              <span class="selected-label">CONNECTED SOCIAL & PUBLIC PROFILES</span>
+              <span class="channels-note">Public data collected · Login session not required for public discovery</span>
+            </div>
+            <div id="channels-list" class="channels-list"></div>
+          </div>
+          <div class="live-log-container">
+            <div class="live-log-header">
+              <span>Live Execution & Crawler Stream</span>
+              <button id="toggle-log-btn" type="button" class="ghost small-btn">Show live terminal</button>
+            </div>
+            <pre id="job-log-view" class="job-log-view" hidden></pre>
+          </div>
           <div id="artifact-list" class="artifacts"></div>
         </div>
       </section>
