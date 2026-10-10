@@ -88,7 +88,11 @@ async function poll(id) {
   catch(error){renderJob({status:'failed',stage:'connection',progress:100,message:error.message});}
 }
 async function loadArtifacts(id) {
-  const data=await api(`/api/jobs/${id}/artifacts`); $('artifact-list').innerHTML=data.files.map(file=>`<a class="artifact-link" download href="${file.url}">${escapeHtml(file.name)} ↓</a>`).join('');
+  const data=await api(`/api/jobs/${id}/artifacts`);
+  $('artifact-list').innerHTML=data.files.map(file=>{
+    const isPdf = file.name.endsWith('.pdf');
+    return `<a class="artifact-link ${isPdf?'pdf-badge':''}" download href="${file.url}">${isPdf ? '📄 ' : ''}${escapeHtml(file.name)} ↓</a>`;
+  }).join('');
 }
 $('discover-form').addEventListener('submit', e=>{e.preventDefault();discover(1)});
 $('research-form').addEventListener('submit', startResearch);
