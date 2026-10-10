@@ -66,6 +66,7 @@ _web_search = WebSearchTool()
 _web_fetch = WebFetchTool()
 
 SchemaT = TypeVar("SchemaT", bound=BaseModel)
+MODEL_CALL_LOG: List[dict] = []
 
 
 def _get_memory(state: ResearchState) -> Optional[MemoryManager]:
@@ -387,11 +388,22 @@ async def _invoke_structured(
     structured output. The fallback keeps those models usable by asking for raw
     JSON and validating it locally with Pydantic.
     """
+    started = datetime.now(timezone.utc)
+    model_name = getattr(llm, "model_name", None) or getattr(llm, "model", None) or "configured-model"
+    purpose = schema.__name__
     try:
-        result = await llm.with_structured_output(schema).ainvoke(messages)
-        if isinstance(result, schema):
-            return result
-        return schema.model_validate(result)
+        # Azure/OpenAI strict JSON-schema mode rejects existing evidence fields
+        # that intentionally allow provider-specific dictionaries. Function
+        # calling still constrains the response and lets Pydantic validate it
+        # locally without weakening the application-owned contract.
+        try:
+            structured_llm = llm.with_structured_output(schema, method="function_calling")
+        except TypeError:
+            structured_llm = llm.with_structured_output(schema)
+        result = await structured_llm.ainvoke(messages)
+        parsed = result if isinstance(result, schema) else schema.model_validate(result)
+        MODEL_CALL_LOG.append({"purpose": purpose, "model": str(model_name), "status": "success", "retrieved_at": started.isoformat()})
+        return parsed
     except Exception as structured_exc:
         schema_json = json.dumps(schema.model_json_schema(), indent=2)
         response = await llm.ainvoke(
@@ -407,8 +419,11 @@ async def _invoke_structured(
             ]
         )
         try:
-            return schema.model_validate(_extract_json_object(str(response.content)))
+            parsed = schema.model_validate(_extract_json_object(str(response.content)))
+            MODEL_CALL_LOG.append({"purpose": purpose, "model": str(model_name), "status": "success_fallback", "retrieved_at": started.isoformat()})
+            return parsed
         except Exception as fallback_exc:
+            MODEL_CALL_LOG.append({"purpose": purpose, "model": str(model_name), "status": "failed", "retrieved_at": started.isoformat()})
             raise RuntimeError(
                 "Structured output failed and JSON fallback could not be validated. "
                 f"structured_error={structured_exc!r}; fallback_error={fallback_exc!r}"
@@ -1920,6 +1935,7 @@ def _save_product_manifests(
         "coverage_summary": state.get("coverage_summary", {}),
         "tool_errors": state.get("search_failures", []) + state.get("fetch_failures", []),
         "registry_verification": state.get("registry_verification", {}),
+        "model_usage": list(MODEL_CALL_LOG),
         "report_paths": {
             "markdown": os.path.join(workdir, "company_research_report.md"),
             "json": report_json,

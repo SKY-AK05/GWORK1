@@ -91,7 +91,7 @@ async def _run(args: argparse.Namespace) -> int:
         path = workdir / name
         if path.exists():
             print(f"Output           : {path}")
-    return status
+    return status if status != 0 else (0 if validation["valid"] else 1)
 
 
 def main() -> int:
