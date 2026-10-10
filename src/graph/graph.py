@@ -38,10 +38,12 @@ from src.graph.nodes import (
     execute_parallel_research_node,
     execute_searches_node,
     fetch_pages_node,
+    load_company_memory_node,
     follow_up_searches_node,
     plan_researchers_node,
     plan_search_node,
     save_artifacts_node,
+    persist_company_memory_node,
     verify_company_intelligence_node,
     verify_claims_node,
 )
@@ -76,6 +78,7 @@ def build_research_graph(interactive: bool = False):
     workflow = StateGraph(ResearchState)
 
     # Register all nodes
+    workflow.add_node("load_company_memory", load_company_memory_node)
     workflow.add_node("detect_mode", detect_mode_node)
     workflow.add_node("plan_search", plan_search_node)
     workflow.add_node("execute_searches", execute_searches_node)
@@ -88,10 +91,12 @@ def build_research_graph(interactive: bool = False):
     workflow.add_node("build_report", build_report_node)
     workflow.add_node("verify_claims", verify_claims_node)
     workflow.add_node("critique", critique_node)
+    workflow.add_node("persist_company_memory", persist_company_memory_node)
     workflow.add_node("save_artifacts", save_artifacts_node)
 
     # Entry point
-    workflow.add_edge(START, "detect_mode")
+    workflow.add_edge(START, "load_company_memory")
+    workflow.add_edge("load_company_memory", "detect_mode")
 
     # Branch: single-researcher vs multi-researcher
     workflow.add_conditional_edges(
@@ -123,10 +128,11 @@ def build_research_graph(interactive: bool = False):
         _route_after_critique,
         {
             "build_report": "build_report",
-            "save_artifacts": "save_artifacts",
+            "save_artifacts": "persist_company_memory",
         },
     )
 
+    workflow.add_edge("persist_company_memory", "save_artifacts")
     workflow.add_edge("save_artifacts", END)
 
     if interactive:

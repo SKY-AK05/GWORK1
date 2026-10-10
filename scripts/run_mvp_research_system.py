@@ -83,6 +83,11 @@ def parse_args() -> argparse.Namespace:
         help="Override output directory (default: workdir/<tag>)",
     )
     parser.add_argument(
+        "--memory-db",
+        default=os.getenv("COMPANY_MEMORY_DB", "~/.cache/deepresearch/company_intelligence.sqlite3"),
+        help="Durable company-memory SQLite path (default: ~/.cache/deepresearch/company_intelligence.sqlite3)",
+    )
+    parser.add_argument(
         "--num-researchers",
         type=int,
         default=1,
@@ -202,6 +207,9 @@ async def main() -> int:
         "writer_model_name": writer_model,
         "depth": args.depth,
         "session_id": session_id,
+        "memory_company_name": None,
+        "memory_jurisdiction": None,
+        "memory_db_path": args.memory_db,
         # task analysis defaults
         "task_mode": "standard",
         "comparison_targets": [],
@@ -230,6 +238,12 @@ async def main() -> int:
         "workforce_signals": [],
         "hiring_signals": [],
         "claim_ledger": [],
+        "company_memory_context": {},
+        "memory_gaps": [],
+        "stale_findings": [],
+        "memory_conflicts": [],
+        "memory_summary": {},
+        "durable_memory_status": {},
         # multi-researcher pipeline
         "num_researchers": args.num_researchers,
         "sub_topics": [],

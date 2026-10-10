@@ -18,7 +18,8 @@ Usage
   await memory.put(DataType.PAGE_CACHE, url, page_dict)
 """
 
+from src.memory.company_store import CompanyMemoryStore
 from src.memory.manager import MemoryManager, get_manager
 from src.memory.types import DataType, MemoryRecord
 
-__all__ = ["DataType", "MemoryManager", "MemoryRecord", "get_manager"]
+__all__ = ["CompanyMemoryStore", "DataType", "MemoryManager", "MemoryRecord", "get_manager"]

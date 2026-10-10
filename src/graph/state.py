@@ -20,6 +20,9 @@ class ResearchState(TypedDict):
     model_name: str                      # Research model (query planning, gap analysis)
     writer_model_name: Optional[str]     # Synthesis model (memo, report, critique); None = use model_name
     session_id: Optional[str]           # Unique run ID for memory management
+    memory_company_name: Optional[str]  # Stable durable-memory profile name
+    memory_jurisdiction: Optional[str] # Stable durable-memory jurisdiction
+    memory_db_path: Optional[str]       # SQLite path; defaults to user cache
 
     # ── Depth control ─────────────────────────────────────────────────
     depth: str                         # "brief" | "standard" | "comprehensive"
@@ -53,6 +56,12 @@ class ResearchState(TypedDict):
     workforce_signals: List[dict]       # leadership, employees, joiners, departures, position changes
     hiring_signals: List[dict]          # public job-posting requirements and work arrangements
     claim_ledger: List[dict]            # verified/secondary/inference/unknown claim labels
+    company_memory_context: dict        # prior source-linked findings loaded before planning
+    memory_gaps: List[str]              # stale/missing/conflicting evidence prompts
+    stale_findings: List[dict]
+    memory_conflicts: List[dict]
+    memory_summary: dict
+    durable_memory_status: dict
 
     # ── Multi-researcher (set by plan_researchers / execute_parallel_research) ──
     num_researchers: int               # >1 enables parallel researchers; default 1

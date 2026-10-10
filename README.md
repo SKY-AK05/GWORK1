@@ -450,6 +450,24 @@ The investigation plan covers business purpose and mission, business model, prod
 
 The structured memo and report expose `entity_relationships`, `business_analysis`, `workforce_signals`, `hiring_signals`, and `claim_ledger`. Important claims are classified as `verified_fact`, `secondary_claim`, `inference`, or `unknown`, with source references and evidence gaps. Adaptive follow-up planning prioritizes unresolved identity links, missing primary records, contradictory facts, and under-covered hiring or workforce questions.
 
+### Durable research memory
+
+Each run now uses an append-only SQLite company-memory database at `~/.cache/deepresearch/company_intelligence.sqlite3` by default. Override it with `--memory-db` or `COMPANY_MEMORY_DB`. The store keeps profiles, legal-entity observations, aliases, relationships, products, customers, people, role changes, dated events, claims, source URLs, evidence excerpts, retrieval timestamps, confidence, and verification status in separate structured tables. Historical observations are retained rather than overwritten.
+
+Before planning, the agent retrieves prior source-linked findings and reports stale records (30 days by default), missing evidence, and conflicting claim values as explicit research gaps. Previous model output is never treated as a verified fact unless it is stored with a supporting source URL and evidence excerpt. Unsupported claims are not persisted.
+
+The agent prioritizes public sources and permitted APIs, including public company pages and public social/search results. It does not request passwords, OTPs, cookies, or session exports. If a permitted authenticated platform workflow is ever added, authentication must occur on that platform’s normal login page with explicit user control; otherwise the run continues with public sources and records the limitation.
+
+Example with a dedicated test database:
+
+```bash
+PYTHONPATH=. python -m app research \
+  --company ORCHVATE --country India --depth comprehensive \
+  --memory-db /tmp/orchvate-company-memory.sqlite3
+```
+
+The ORCHVATE India memory test covers identity observations, aliases, source-linked claims, historical retention, stale-finding detection, and contradictory-headquarters detection. Provider-backed live social integrations were not enabled in this acceptance run; public-source behavior was tested with deterministic fixtures and the existing configured research adapters.
+
 ---
 
 ## Testing

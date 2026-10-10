@@ -34,6 +34,7 @@ def _parser() -> argparse.ArgumentParser:
     research.add_argument("--rag", action="store_true")
     research.add_argument("--interactive", action="store_true")
     research.add_argument("--output-dir", default="reports")
+    research.add_argument("--memory-db", default=os.getenv("COMPANY_MEMORY_DB", "~/.cache/deepresearch/company_intelligence.sqlite3"))
     return parser
 
 
@@ -71,6 +72,7 @@ async def _run(args: argparse.Namespace) -> int:
         "--depth", depth,
         "--num-researchers", str(args.num_researchers),
         "--workdir", str(workdir),
+        "--memory-db", args.memory_db,
     ]
     if args.writer_model:
         forwarded += ["--writer-model", args.writer_model]

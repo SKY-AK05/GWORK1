@@ -35,6 +35,7 @@ from pydantic import BaseModel
 from src.graph.state import ResearchState
 from src.llm.factory import get_llm
 from src.memory import DataType, MemoryManager, get_manager
+from src.memory.company_store import CompanyMemoryStore
 from src.memory.manager import search_cache_key
 from src.schemas.research import (
     ClaimRecord,
@@ -510,6 +511,69 @@ def _format_source_index_block(index: List[Dict[str, str]]) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════ #
+#  durable company memory                                                       #
+# ═══════════════════════════════════════════════════════════════════════════ #
+
+def _company_memory_identity(state: ResearchState) -> tuple[str, str | None]:
+    name = str(state.get("memory_company_name") or _company_search_term(state.get("task", ""))).strip()
+    jurisdiction = state.get("memory_jurisdiction")
+    if not jurisdiction:
+        task = state.get("task", "")
+        match = re.search(r"(?:target (?:jurisdiction|country)|in)[: ]+([A-Z][A-Za-z ]{2,40})", task)
+        jurisdiction = match.group(1).strip(" .") if match else None
+    return name or "Unknown", jurisdiction
+
+
+async def load_company_memory_node(state: ResearchState) -> dict:
+    """Retrieve prior evidence and expose stale/conflict gaps before planning."""
+    name, jurisdiction = _company_memory_identity(state)
+    store = CompanyMemoryStore(state.get("memory_db_path") or os.getenv("COMPANY_MEMORY_DB", "~/.cache/deepresearch/company_intelligence.sqlite3"))
+    context = await asyncio.to_thread(store.load_context, name, jurisdiction, stale_after_days=int(os.getenv("COMPANY_MEMORY_STALE_DAYS", "30")))
+    return {
+        "company_memory_context": context,
+        "memory_gaps": context.get("missing", []),
+        "stale_findings": context.get("stale_findings", []),
+        "memory_conflicts": context.get("conflicts", []),
+        "memory_summary": {"found": context.get("found", False), "findings": len(context.get("findings", [])), "stale": len(context.get("stale_findings", [])), "conflicts": len(context.get("conflicts", []))},
+    }
+
+
+async def persist_company_memory_node(state: ResearchState) -> dict:
+    """Append source-linked observations after the final report pass."""
+    name, jurisdiction = _company_memory_identity(state)
+    store = CompanyMemoryStore(state.get("memory_db_path") or os.getenv("COMPANY_MEMORY_DB", "~/.cache/deepresearch/company_intelligence.sqlite3"))
+    memo = state.get("memo") or {}
+    report = state.get("report") or {}
+    raw_sources = memo.get("sources", [])
+    sources = raw_sources or [{"url": page.get("url"), "title": page.get("title"), "retrieved_at": page.get("retrieved_at"), "source_category": "web"} for page in state.get("fetched_pages", []) if page.get("url")]
+    claims = []
+    for item in report.get("claim_ledger", []) or memo.get("claim_ledger", []):
+        evidence = item.get("evidence_excerpt") or item.get("evidence") or ""
+        if isinstance(evidence, list):
+            evidence = " ".join(str(value) for value in evidence)
+        source_url = item.get("source_url") or item.get("url")
+        if source_url and evidence:
+            claims.append({**item, "source_url": source_url, "evidence_excerpt": str(evidence)})
+    products = [{"name": item, "source_url": source.get("url"), "evidence": "Business analysis product/service entry"} for item in (report.get("business_analysis", {}).get("products", []) if isinstance(report.get("business_analysis"), dict) else []) for source in sources[:1]]
+    customers = [{"name": item, "source_url": source.get("url"), "evidence": "Business analysis customer/beneficiary entry"} for item in (report.get("business_analysis", {}).get("customers", []) if isinstance(report.get("business_analysis"), dict) else []) for source in sources[:1]]
+    status = await asyncio.to_thread(
+        store.record_run, name, jurisdiction,
+        sources=sources,
+        identities=state.get("identity_candidates", []),
+        relationships=state.get("entity_relationships", []),
+        roles=state.get("role_records", []),
+        events=state.get("dated_events", []),
+        workforce=state.get("workforce_signals", []),
+        hiring=state.get("hiring_signals", []),
+        claims=claims,
+        business_analysis=report.get("business_analysis") or memo.get("business_analysis") or {},
+        aliases=[{"alias": item.get("candidate_name") or item.get("name"), "alias_type": "identity_candidate", "source_url": item.get("source_url"), "evidence": item.get("evidence"), "confidence": item.get("confidence", "low"), "verification_status": item.get("verification_status", "candidate")} for item in state.get("identity_candidates", []) if item.get("candidate_name") or item.get("name")],
+        products=products, customers=customers,
+    )
+    return {"durable_memory_status": status}
+
+
+# ═══════════════════════════════════════════════════════════════════════════ #
 #  detect_mode_node                                                            #
 # ═══════════════════════════════════════════════════════════════════════════ #
 
@@ -608,7 +672,13 @@ async def plan_search_node(state: ResearchState) -> dict:
                         "and budget. Browser research is not enabled by default."
                     )
                 ),
-                HumanMessage(content=task),
+                HumanMessage(content=(
+                    f"{task}\n\n"
+                    f"Prior durable memory context:\n{json.dumps(state.get('company_memory_context', {}), ensure_ascii=False, default=str)[:12000]}\n"
+                    f"Memory gaps that must be investigated or explicitly reported:\n{json.dumps(state.get('memory_gaps', []))}\n"
+                    f"Stale findings:\n{json.dumps(state.get('stale_findings', []), ensure_ascii=False, default=str)[:6000]}\n"
+                    f"Conflicting findings:\n{json.dumps(state.get('memory_conflicts', []), ensure_ascii=False, default=str)[:6000]}"
+                )),
             ],
         )
         validated = validate_plan_tools(plan.model_dump())
@@ -1125,7 +1195,11 @@ async def plan_researchers_node(state: ResearchState) -> dict:
                     f"Return a JSON array of exactly {num_researchers} short descriptive strings."
                 )
             ),
-            HumanMessage(content=task),
+            HumanMessage(content=(
+                f"{task}\n\nPrior durable-memory gaps:\n"
+                f"{json.dumps(state.get('memory_gaps', []))}\n"
+                f"Prior conflicts:\n{json.dumps(state.get('memory_conflicts', []), ensure_ascii=False, default=str)}"
+            )),
         ]
     )
 
@@ -1974,6 +2048,12 @@ def _save_product_manifests(
         "coverage_summary": state.get("coverage_summary", {}),
         "tool_errors": state.get("search_failures", []) + state.get("fetch_failures", []),
         "registry_verification": state.get("registry_verification", {}),
+        "durable_memory": {
+            "summary": state.get("memory_summary", {}),
+            "gaps": state.get("memory_gaps", []),
+            "conflicts": state.get("memory_conflicts", []),
+            "persistence": state.get("durable_memory_status", {}),
+        },
         "model_usage": list(MODEL_CALL_LOG),
         "report_paths": {
             "markdown": os.path.join(workdir, "company_research_report.md"),
